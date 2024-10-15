@@ -1,0 +1,25 @@
+PATH
+  remote: .
+  specs:
+    mavrik (0.1.0)
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+    rake (13.2.1)
+    rake-compiler (1.2.8)
+      rake
+    rb_sys (0.9.102)
+
+PLATFORMS
+  arm64-darwin-24
+  ruby
+
+DEPENDENCIES
+  mavrik!
+  rake (~> 13.0)
+  rake-compiler
+  rb_sys (~> 0.9.63)
+
+BUNDLED WITH
+   2.5.3
