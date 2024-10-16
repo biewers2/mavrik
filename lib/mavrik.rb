@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative "mavrik/test"
 require_relative "mavrik/version"
 require_relative "mavrik/mavrik"
 

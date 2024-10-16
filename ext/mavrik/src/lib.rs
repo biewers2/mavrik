@@ -1,12 +1,14 @@
-use magnus::{function, prelude::*, Error, Ruby};
+mod main_rb;
+mod signal_listener;
+mod task_executor;
+mod tcp_listener;
+mod events;
 
-fn hello(subject: String) -> String {
-    format!("Hello from Rust, {subject}!")
-}
+use crate::main_rb::define_main;
+use magnus::Ruby;
 
 #[magnus::init]
-fn init(ruby: &Ruby) -> Result<(), Error> {
-    let module = ruby.define_module("Mavrik")?;
-    module.define_singleton_method("hello", function!(hello, 1))?;
+fn init(ruby: &Ruby) -> Result<(), magnus::Error> {
+    define_main(ruby)?;
     Ok(())
 }
