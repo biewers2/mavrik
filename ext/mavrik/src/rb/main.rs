@@ -1,14 +1,14 @@
 use crate::signal_listener::listen_for_signals;
 use crate::task_executor::execute_tasks;
 use crate::tcp_listener::listen_for_tcp_connections;
-use log::{info, trace};
-use magnus::{function, Object, Ruby};
+use log::info;
+use magnus::{function, Module, Object, RModule, Ruby};
 use std::sync::mpsc;
 use std::thread;
 use std::thread::JoinHandle;
 
-pub fn define_main(ruby: &Ruby) -> Result<(), magnus::Error> {
-    let mavrik = ruby.define_module("Mavrik")?;
+pub(crate) fn define_main(ruby: &Ruby) -> Result<(), magnus::Error> {
+    let mavrik = ruby.class_object().const_get::<_, RModule>("Mavrik")?;
     mavrik.define_singleton_method("main", function!(main, 0))?;
     Ok(())
 }
@@ -16,7 +16,6 @@ pub fn define_main(ruby: &Ruby) -> Result<(), magnus::Error> {
 fn main() {
     rutie::Thread::call_without_gvl(
         move || {
-            env_logger::init();
             info!("Starting Maverik server");
 
             let (event_tx, event_rx) = mpsc::channel();
@@ -34,7 +33,6 @@ fn main() {
         },
         Some(|| {})
     );
-
 }
 
 fn join_thread<T>(handle: JoinHandle<Result<T, anyhow::Error>>, name: &str) {

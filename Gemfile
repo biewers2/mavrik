@@ -9,3 +9,7 @@ gem "rake", "~> 13.0"
 
 gem "rake-compiler"
 gem "rb_sys", "~> 0.9.63"
+
+group :development, :test do
+  gem "rspec"
+end

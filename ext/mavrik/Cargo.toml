@@ -6,7 +6,7 @@ authors = ["Jacob Biewer <biewers2@gmail.com>"]
 publish = false
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 anyhow = "1.0"
@@ -14,4 +14,6 @@ env_logger = "0.11"
 log = "0.4"
 magnus = { version = "0.7", features = ["embed"] }
 rutie = "0.9"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 signal-hook = "0.3"
