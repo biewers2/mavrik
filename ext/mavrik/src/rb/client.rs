@@ -1,12 +1,42 @@
 use crate::client::Client;
-use crate::rb::module_mavrik;
-use magnus::{Module, Ruby};
+use crate::events::MavrikRequest;
+use crate::rb::{mavrik_error, module_mavrik};
+use crate::runtime::async_runtime;
+use magnus::{method, Module, Ruby};
 
 #[derive(Debug)]
 #[magnus::wrap(class = "Mavrik::Client", free_immediately, size)]
-pub struct RbClient(pub Client);
+pub struct RbClient(Client);
+
+impl RbClient {
+    pub fn new(inner: Client) -> Self {
+        Self(inner)
+    }
+    
+    pub fn send_message(&self, message: String) -> Result<String, magnus::Error> {
+        rutie::Thread::call_without_gvl(
+            move || self.send(&message).map_err(mavrik_error),
+            Some(|| {})
+        )
+    }
+    
+    fn send(&self, message: &str) -> Result<String, anyhow::Error> {
+        async_runtime().block_on(async move {
+            let request = serde_json::from_str::<MavrikRequest>(message)?;
+            // debug!("Sending request '{request:?}' over TCP");
+
+            self.0.send(&request).await?;
+            let response = self.0.recv().await?;
+
+            // debug!("Received response '{response:?}' over TCP");
+            let value = serde_json::to_string(&response)?;
+            Ok(value)    
+        })
+    }
+}
 
 pub fn define_client(ruby: &Ruby) -> Result<(), magnus::Error> {
-    module_mavrik(ruby).define_class("Client", ruby.class_object())?;
+    let client = module_mavrik(ruby).define_class("Client", ruby.class_object())?;
+    client.define_method("send_message", method!(RbClient::send_message, 1))?;
     Ok(())
 }

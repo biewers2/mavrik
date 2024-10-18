@@ -3,7 +3,13 @@
 require "json"
 
 module Mavrik
+  # Executes a task using the provided arguments.
+  # Called natively by the Mavrik task executor.
   class ExecuteTask
+    # @param definition [String] Class string of the task to execute.
+    # @param input_args [String] JSON array string of the positional arguments.
+    # @param input_kwargs [String] JSON object string of the keyword arguments.
+    # @return [Hash] The result of the task execution.
     def call(definition:, input_args:, input_kwargs:)
       args = JSON.parse(input_args)
       kwargs = JSON.parse(input_kwargs)

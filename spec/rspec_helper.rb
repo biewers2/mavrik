@@ -7,3 +7,6 @@ Rake::Task.send(:load, "Rakefile")
 
 # Require gem
 require "mavrik"
+
+# Require helpers
+require_relative "helpers/server_helpers"

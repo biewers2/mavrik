@@ -11,5 +11,7 @@
 *.so
 *.o
 *.a
+.envrc
+.env
 mkmf.log
 target/
