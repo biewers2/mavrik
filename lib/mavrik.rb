@@ -39,7 +39,7 @@ module Mavrik
       fallback_policy = :caller_runs
 
       # Debug
-      puts "Executor configuration: #{min_threads}-#{max_threads} threads, #{max_queue} queue size, #{fallback_policy} fallback policy"
+      # puts "Executor configuration: #{min_threads}-#{max_threads} threads, #{max_queue} queue size, #{fallback_policy} fallback policy"
 
       Concurrent::ThreadPoolExecutor.new(min_threads:, max_threads:, max_queue:, fallback_policy:)
     end
