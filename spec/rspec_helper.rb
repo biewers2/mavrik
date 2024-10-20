@@ -12,9 +12,6 @@ require "mavrik"
 require_relative "helpers/server_helpers"
 
 RSpec.configure do |c|
-  c.before(feature: true) { start_server }
-  c.after(feature: true) { stop_server }
-
-  c.before(performance: true) { start_server }
-  c.after(performance: true) { stop_server }
+  c.before(:all) { start_server }
+  c.after(:all) { stop_server }
 end

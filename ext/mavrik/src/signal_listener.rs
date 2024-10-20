@@ -1,11 +1,11 @@
 use anyhow::Context;
-use futures::StreamExt;
 use libc::SIGINT;
 use log::{debug, info};
 use signal_hook_tokio::Signals;
 use tokio::select;
 use tokio::sync::{mpsc, oneshot};
-use futures::TryFutureExt;
+use std::future::IntoFuture;
+use futures::StreamExt;
 use crate::events::MavrikEvent;
 
 pub struct SignalListenerParams {

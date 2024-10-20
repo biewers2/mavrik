@@ -2,7 +2,7 @@
 
 require "rspec_helper"
 
-RSpec.describe "client sends task to server", feature: true do
+RSpec.describe "client sends task to server", server: true, feature: true do
   class TestTask
     def call(a, b, c:)
       a + b + c

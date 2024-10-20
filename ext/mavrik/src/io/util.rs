@@ -1,4 +1,4 @@
-use futures::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use log::trace;
 use serde::de::DeserializeOwned;
 use serde::Serialize;

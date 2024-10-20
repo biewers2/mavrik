@@ -4,7 +4,7 @@ require "mavrik"
 
 Mavrik.main({
   host: "127.0.0.1",
-  port: 3100,
+  port: 3001,
   signal_parent_ready: false,
-  thread_count: 4
+  thread_count: 20
 })

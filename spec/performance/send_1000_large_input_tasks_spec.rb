@@ -9,7 +9,7 @@ require "rspec_helper"
 # long it takes to send all the tasks.
 #
 
-RSpec.describe "send 1000 large input tasks", performance: true do
+RSpec.describe "send 1000 large input tasks", server: true, performance: true do
   class CpuIntensiveTask
     include Mavrik::Task
 

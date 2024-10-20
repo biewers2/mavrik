@@ -1,13 +1,13 @@
-use crate::client::{Client, ClientOptions};
 use crate::rb::client::RbClient;
 use crate::rb::{mavrik_error, module_mavrik};
 use crate::runtime::async_runtime;
 use log::debug;
 use magnus::{function, Object, RHash, Ruby};
 use crate::fetch;
+use crate::io::{Client, ClientOptions};
 
-pub(crate) fn define_init(ruby: &Ruby) -> Result<(), magnus::Error> {
-    module_mavrik(ruby).define_singleton_method("init", function!(init, 1))?;
+pub(crate) fn define_init(_ruby: &Ruby) -> Result<(), magnus::Error> {
+    module_mavrik().define_singleton_method("init", function!(init, 1))?;
     Ok(())
 }
 
