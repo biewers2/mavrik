@@ -7,8 +7,7 @@ use magnus::{function, Object, RHash, Ruby};
 use crate::fetch;
 
 pub(crate) fn define_init(ruby: &Ruby) -> Result<(), magnus::Error> {
-    let mavrik = module_mavrik(ruby);
-    mavrik.define_singleton_method("init", function!(init, 1))?;
+    module_mavrik(ruby).define_singleton_method("init", function!(init, 1))?;
     Ok(())
 }
 

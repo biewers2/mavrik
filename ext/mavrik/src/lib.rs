@@ -6,6 +6,7 @@ pub mod rb;
 pub mod client;
 pub mod io;
 mod runtime;
+mod event_loop;
 
 #[magnus::init]
 fn init(ruby: &magnus::Ruby) -> Result<(), magnus::Error> {

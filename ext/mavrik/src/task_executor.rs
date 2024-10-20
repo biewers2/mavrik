@@ -1,47 +1,66 @@
-use crate::events::{MavrikEvent, ReadyThread, Task};
-use crate::rb::class_execute_task_new;
-use log::{debug, info, trace};
+use crate::events::{MavrikEvent, Task};
+use crate::rb::{class_execute_task_new, mavrik_error};
+use crate::runtime::async_runtime;
+use log::{debug, trace};
 use magnus::value::ReprValue;
 use magnus::{kwargs, Ruby};
-use std::process::exit;
-use std::sync::mpsc;
-use std::sync::mpsc::{Receiver, Sender};
+use std::collections::HashMap;
+use anyhow::anyhow;
+use tokio::sync::{mpsc, oneshot};
+use crate::{with_gvl, without_gvl};
 
 pub struct TaskExecutorOptions {
     pub rb_thread_count: usize,
 }
 
+pub struct TaskExecutorParams {
+    pub event_tx: mpsc::Sender<MavrikEvent>,
+    pub event_rx: mpsc::Receiver<MavrikEvent>,
+    pub term_rx: oneshot::Receiver<()>
+}
+
+pub type ThreadId = usize;
+
+struct ThreadTableEntry {
+    thread: magnus::Thread,
+    task_tx: mpsc::Sender<Task>
+}
+
 pub struct TaskExecutor {
-    _rb_threads: Vec<magnus::Thread>,
+    thread_table: HashMap<usize, ThreadTableEntry>,
     task_buf: Vec<Task>,
-    ready_thread_buf: Vec<ReadyThread>,
+    ready_buf: Vec<ThreadId>,
 }
 
 impl TaskExecutor {
-    pub fn new(options: TaskExecutorOptions, event_tx: Sender<MavrikEvent>) -> Result<Self, anyhow::Error> {
+    pub fn new(options: TaskExecutorOptions, event_tx: mpsc::Sender<MavrikEvent>) -> Result<Self, anyhow::Error> {
         let TaskExecutorOptions { rb_thread_count } = options;
-        
-        let rb_threads = rutie::Thread::call_with_gvl::<_, Result<Vec<magnus::Thread>, anyhow::Error>>(|| {
+
+        let thread_table = with_gvl!({
             let ruby = Ruby::get()?;
 
-            let mut rb_threads = vec![];
-            for _ in 0..rb_thread_count {
-                let thread_event_tx = event_tx.clone();
-                rb_threads.push(ruby.thread_create_from_fn(move |r| rb_thread_main(r, thread_event_tx)));
+            let mut table = HashMap::new();
+            for i in 0..rb_thread_count {
+                let thread_id = i;
+                let (task_tx, task_rx) = mpsc::channel::<Task>(1000);
+                let event_tx = event_tx.clone();
+                let thread = ruby.thread_create_from_fn(move |r| rb_thread_main(r, thread_id, event_tx, task_rx));
+                table.insert(thread_id, ThreadTableEntry { thread, task_tx });
             }
-            Ok(rb_threads)
+
+            Result::<_, anyhow::Error>::Ok(table)
         })?;
 
         Ok(Self {
-            _rb_threads: rb_threads,
+            thread_table,
             task_buf: vec![],
-            ready_thread_buf: vec![],
+            ready_buf: vec![],
         })
     }
 
-    pub fn execute(&mut self, task: Task) -> Result<(), anyhow::Error> {
-        match self.ready_thread_buf.pop() {
-            Some(ready_thread) => self.run_task_on_thread(ready_thread, task)?,
+    pub async fn execute(&mut self, task: Task) -> Result<(), anyhow::Error> {
+        match self.ready_buf.pop() {
+            Some(thread_id) => self.run_task_on_thread(thread_id, task).await?,
             None => {
                 trace!("No ready threads, pushing {task:?} onto queue");
                 self.task_buf.push(task);
@@ -50,77 +69,59 @@ impl TaskExecutor {
         Ok(())
     }
 
-    pub fn run_on_thread(&mut self, ready_thread: ReadyThread) -> Result<(), anyhow::Error> {
+    pub async fn run_on_thread(&mut self, thread_id: ThreadId) -> Result<(), anyhow::Error> {
         match self.task_buf.pop() {
-            Some(task) => self.run_task_on_thread(ready_thread, task)?,
+            Some(task) => self.run_task_on_thread(thread_id, task).await?,
             None => {
                 trace!("No tasks in queue, pushing thread onto queue");
-                self.ready_thread_buf.push(ready_thread);
+                self.ready_buf.push(thread_id);
             }
         }
         Ok(())
     }
+    
+    pub fn into_threads(self) -> Vec<magnus::Thread> {
+        self.thread_table.into_values().map(|e| e.thread).collect()
+    }
 
-    fn run_task_on_thread(&self, ready_thread: ReadyThread, task: Task) -> Result<(), anyhow::Error> {
-        debug!("Running {task:?} on thread");
-        ready_thread.task_tx.send(task)?;
+    async fn run_task_on_thread(&self, thread_id: ThreadId, task: Task) -> Result<(), anyhow::Error> {
+        debug!("Running {task:?} on thread {thread_id}");
+        
+        let entry = self.thread_table.get(&thread_id).ok_or(anyhow!("thread with ID {thread_id} not found"))?;
+        entry.task_tx.send(task).await?;
+        
         Ok(())
     }
 }
 
-pub fn execute_tasks(options: TaskExecutorOptions, event_tx: Sender<MavrikEvent>, event_rx: Receiver<MavrikEvent>) -> Result<(), anyhow::Error> {
-    info!("Starting task executor");
-    let mut executor = TaskExecutor::new(options, event_tx)?;
-
-    while let Ok(value) = event_rx.recv() {
-        trace!("Received event {value:?} in task executor");
-
-        match value {
-            MavrikEvent::NewTask(task) => executor.execute(task)?,
-            MavrikEvent::ReadyThread(ready_thread) => executor.run_on_thread(ready_thread)?,
-            MavrikEvent::Signal(libc::SIGINT | libc::SIGTERM) => {
-                info!("Received request for termination, stopping threads...");
-                break
-            },
-            MavrikEvent::Signal(sig) => exit(sig)
-        }
-    }
-    Ok(())
-}
-
-fn rb_thread_main(ruby: &Ruby, event_tx: Sender<MavrikEvent>) -> Result<(), magnus::Error> {
-    let (task_tx, task_rx) = mpsc::channel::<Task>();
-
+fn rb_thread_main(ruby: &Ruby, thread_id: ThreadId, event_tx: mpsc::Sender<MavrikEvent>, mut task_rx: mpsc::Receiver<Task>) -> Result<(), magnus::Error> {
     let execute_task = class_execute_task_new(ruby)?;
 
-    // Mark thread ready at the start.
-    let ready_thread = ReadyThread { task_tx: task_tx.clone() };
-    event_tx.send(MavrikEvent::ReadyThread(ready_thread)).expect("failed to send ready thread");
+    without_gvl!({
+        async_runtime().block_on(async {
+            // Mark thread ready at the start.
+            event_tx.send(MavrikEvent::ThreadReady(thread_id)).await.map_err(mavrik_error)?;
 
-    rutie::Thread::call_without_gvl(
-        move || {
-            while let Ok(task) = task_rx.recv() {
+            while let Some(task) = task_rx.recv().await {
                 let Task { id, definition, input_args, input_kwargs, .. } = &task;
                 debug!("({id}) Executing '{definition}' with args '{input_args}' and kwargs '{input_kwargs}'");
-                
-                let result: Result<magnus::Value, magnus::Error> = rutie::Thread::call_with_gvl(move || {
+
+                let result = with_gvl!({
                     let ctx = kwargs!(
                         "definition" => definition.as_str(),
                         "input_args" => input_args.as_str(),
                         "input_kwargs" => input_kwargs.as_str()
                     );
                     let result = execute_task.funcall::<_, _, magnus::Value>("call", (ctx,))?;
-                    Ok(result)
+                    Result::<_, magnus::Error>::Ok(result)
                 });
-                
+
                 debug!("({id}) Result of execution: {result:?}");
 
-                let ready_thread = ReadyThread { task_tx: task_tx.clone() };
-                event_tx.send(MavrikEvent::ReadyThread(ready_thread)).expect("failed to send ready thread");
+                event_tx.send(MavrikEvent::ThreadReady(thread_id)).await.map_err(mavrik_error)?;
             }
 
             Ok(())
-        },
-        Some(|| {}),
-    )
+        })
+    })
 }

@@ -1,23 +1,46 @@
-use std::sync::mpsc::Sender;
 use anyhow::Context;
-use log::info;
-use signal_hook::consts::SIGINT;
-use signal_hook::iterator::Signals;
+use futures::StreamExt;
+use libc::SIGINT;
+use log::{debug, info};
+use signal_hook_tokio::Signals;
+use tokio::select;
+use tokio::sync::{mpsc, oneshot};
+use futures::TryFutureExt;
 use crate::events::MavrikEvent;
 
-pub fn listen_for_signals(event_tx: Sender<MavrikEvent>) -> Result<(), anyhow::Error> {
+pub struct SignalListenerParams {
+    pub(crate) event_tx: mpsc::Sender<MavrikEvent>,
+    pub(crate) term_rx: oneshot::Receiver<()>
+}
+
+pub async fn listen_for_signals(params: SignalListenerParams) -> Result<(), anyhow::Error> {
     info!("Starting signal listener");
+    let SignalListenerParams {
+        event_tx,
+        mut term_rx
+    } = params;
     
     let mut signals = Signals::new(&[SIGINT]).context("failed to add signal listener")?;
     let handle = signals.handle();
 
-    for signal in signals.forever() {
-        match signal {
-            SIGINT => event_tx.send(MavrikEvent::Signal(SIGINT))?,
-            _ => ()
-        }
+    let term_rx = &mut term_rx;
+    loop {
+        select! {
+            Some(signal) = signals.next() => {
+                match signal {
+                    SIGINT => event_tx.send(MavrikEvent::Signal(SIGINT)).await?,
+                    _ => ()
+                }
+            },
+            result = term_rx.into_future() => {
+                debug!("[SIG] Received term");
+                result?;
+                break;
+            }
+        };
     }
 
+    info!("Signal listener stopped");
     handle.close();
     Ok(())
 }

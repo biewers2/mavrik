@@ -21,10 +21,8 @@ RSpec.describe "send 1000 large input tasks", performance: true do
   it "is fast" do
     task_count = 1000
 
-    task_ids = with_executor do
-      CpuIntensiveTask.pipe do |p|
-        task_count.times { p.call(random_args) }
-      end
+    task_ids = CpuIntensiveTask.pipe do |p|
+      task_count.times { p.call(random_args) }
     end
 
     expect(task_ids.size).to eq(task_count)

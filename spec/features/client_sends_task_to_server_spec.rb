@@ -18,7 +18,7 @@ RSpec.describe "client sends task to server", feature: true do
       input_kwargs: "{\"c\": 3}"
     )
 
-    id = with_executor { Mavrik.client.send_message(task) }
+    id = Mavrik.client.send_message(task)
 
     expect(id).not_to be_nil
   end
@@ -33,7 +33,7 @@ RSpec.describe "client sends task to server", feature: true do
     )
 
     expect {
-      with_executor { Mavrik.client.send_message(task) }
+      Mavrik.client.send_message(task)
     }.to raise_error(Mavrik::Error, /unknown variant `old_task`/)
   end
 end

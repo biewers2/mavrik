@@ -1,7 +1,7 @@
 use crate::events::{NewTask, Task};
 use serde::{Deserialize, Serialize};
 use std::ffi::c_int;
-use std::sync::mpsc::Sender;
+use crate::task_executor::ThreadId;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -19,12 +19,7 @@ pub enum MavrikResponse {
 
 #[derive(Debug)]
 pub enum MavrikEvent {
-    ReadyThread(ReadyThread),
+    ThreadReady(ThreadId),
     Signal(c_int),
     NewTask(Task)
-}
-
-#[derive(Debug)]
-pub struct ReadyThread {
-    pub task_tx: Sender<Task>
 }

@@ -3,6 +3,7 @@ use crate::events::MavrikRequest;
 use crate::rb::{mavrik_error, module_mavrik};
 use crate::runtime::async_runtime;
 use magnus::{method, Module, Ruby};
+use crate::without_gvl;
 
 #[derive(Debug)]
 #[magnus::wrap(class = "Mavrik::Client", free_immediately, size)]
@@ -14,10 +15,7 @@ impl RbClient {
     }
     
     pub fn send_message(&self, message: String) -> Result<String, magnus::Error> {
-        rutie::Thread::call_without_gvl(
-            move || self.send(&message).map_err(mavrik_error),
-            Some(|| {})
-        )
+        without_gvl!({ self.send(&message).map_err(mavrik_error) })
     }
     
     fn send(&self, message: &str) -> Result<String, anyhow::Error> {
