@@ -1,48 +1,56 @@
-use crate::events::MavrikEvent;
+use crate::events::{GeneralEvent, MavrikEvent};
+use crate::io::{MavrikTcpListener, TcpListenerOptions, TcpListenerParams};
+use crate::service::start_service;
+use crate::signal_listener::{SignalListener, SignalListenerParams};
 use crate::task_executor::{TaskExecutor, TaskExecutorOptions, TaskExecutorParams};
-use log::{debug, info, trace};
-use std::future::IntoFuture;
-use std::process::exit;
-use tokio::select;
+use log::{info, trace};
+use tokio::sync::mpsc;
+use tokio::{pin, try_join};
 
-pub async fn start_event_loop(options: TaskExecutorOptions, params: TaskExecutorParams) -> Result<(), anyhow::Error> {
-    info!("Starting task executor");
-    let TaskExecutorParams {
-        event_tx,
-        mut event_rx,
-        mut term_rx
-    } = params;
+pub struct MavrikOptions {
+    pub exe_options: TaskExecutorOptions,
+    pub tcp_options: TcpListenerOptions
+}
 
-    let mut executor = TaskExecutor::new(options, event_tx)?;
+pub async fn start_event_loop(options: MavrikOptions) -> Result<(), anyhow::Error> {
+    let (event_tx, mut event_rx) = mpsc::channel::<MavrikEvent>(1000);
 
-    let term_rx = &mut term_rx;
-    loop {
-        select! {
-            Some(value) = event_rx.recv() => {
-                trace!("Received event {value:?} in task executor");
+    let params = TaskExecutorParams { event_tx: event_tx.clone() };
+    let exe = TaskExecutor::new(options.exe_options, params)?;
+    let (exe_task, mut exe_chan) = start_service("EXE", exe);
 
-                match value {
-                    MavrikEvent::NewTask(task) => executor.execute(task).await?,
-                    MavrikEvent::ThreadReady(ready_thread) => executor.run_on_thread(ready_thread).await?,
-                    MavrikEvent::Signal(libc::SIGINT | libc::SIGTERM) => {
-                        info!("Received request for termination");
-                        break;
-                    },
-                    MavrikEvent::Signal(sig) => exit(sig)
-                }
-            },
-            result = term_rx.into_future() => {
-                debug!("[EXE] Received term");
-                result?;
-                break
+    let params = TcpListenerParams { event_tx: event_tx.clone() };
+    let tcp = MavrikTcpListener::new(options.tcp_options, params).await?;
+    let (tcp_task, mut tcp_chan) = start_service("TCP", tcp);
+
+    let params = SignalListenerParams { event_tx };
+    let sig = SignalListener::new(params)?;
+    let (sig_task, mut sig_chan) = start_service("SIG", sig);
+
+    let event_loop_task = async move {
+        while let Some(event) = event_rx.recv().await {
+            trace!("Received event {event:?} in event loop");
+
+            match event {
+                MavrikEvent::General(GeneralEvent::Terminate) => {
+                    info!("Received request for termination");
+                    exe_chan.terminate();
+                    tcp_chan.terminate();
+                    sig_chan.terminate();
+                },
+                MavrikEvent::Exe(event) => exe_chan.send(event).await?,
+                MavrikEvent::Tcp(event) => tcp_chan.send(event).await?,
+                MavrikEvent::Sig(event) => sig_chan.send(event).await?
             }
         }
-    }
 
-    for thread in executor.into_threads() {
-        debug!("Killing thread {thread:?}");
-        // let _ = thread.kill();
-    }
-    
+        info!("Event loop finished");
+        Ok(())
+    };
+
+    pin!(event_loop_task);
+    try_join!(event_loop_task, exe_task, tcp_task, sig_task)?;
+
+    info!("Mavrik stopped");
     Ok(())
 }

@@ -1,7 +1,5 @@
 use crate::events::{NewTask, Task};
 use serde::{Deserialize, Serialize};
-use std::ffi::c_int;
-use crate::task_executor::ThreadId;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -19,7 +17,24 @@ pub enum MavrikResponse {
 
 #[derive(Debug)]
 pub enum MavrikEvent {
-    ThreadReady(ThreadId),
-    Signal(c_int),
+    General(GeneralEvent),
+    Exe(ExeEvent),
+    Tcp(TcpEvent),
+    Sig(SigEvent)
+}
+
+#[derive(Debug)]
+pub enum GeneralEvent {
+    Terminate
+}
+
+#[derive(Debug)]
+pub enum ExeEvent {
     NewTask(Task)
 }
+
+#[derive(Debug)]
+pub enum TcpEvent {}
+
+#[derive(Debug)]
+pub enum SigEvent {}
