@@ -1,5 +1,6 @@
-use crate::events::{NewTask, Task};
+use crate::events::{AwaitedTask, NewTask, Task};
 use serde::{Deserialize, Serialize};
+use tokio::sync::oneshot;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -30,7 +31,12 @@ pub enum GeneralEvent {
 
 #[derive(Debug)]
 pub enum ExeEvent {
-    NewTask(Task)
+    NewTask(Task),
+    
+    AwaitTask {
+        task_id: String,
+        value_tx: oneshot::Sender<AwaitedTask>
+    }
 }
 
 #[derive(Debug)]

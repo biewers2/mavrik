@@ -1,8 +1,8 @@
 use crate::event_loop::{start_event_loop, MavrikOptions};
-use crate::io::TcpListenerOptions;
+use crate::tcp::TcpListenerOptions;
 use crate::rb::{mavrik_error, module_mavrik};
 use crate::runtime::async_runtime;
-use crate::task_executor::TaskExecutorOptions;
+use crate::exe::TaskExecutorOptions;
 use crate::{fetch, without_gvl};
 use log::{debug, info};
 use magnus::{function, Object, RHash, Ruby};

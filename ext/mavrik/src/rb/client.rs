@@ -3,7 +3,7 @@ use crate::events::MavrikRequest;
 use crate::rb::{mavrik_error, module_mavrik};
 use crate::runtime::async_runtime;
 use magnus::{method, Module, Ruby};
-use crate::io::Client;
+use crate::tcp::Client;
 use crate::without_gvl;
 
 #[derive(Debug)]

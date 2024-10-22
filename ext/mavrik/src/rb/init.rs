@@ -4,7 +4,7 @@ use crate::runtime::async_runtime;
 use log::debug;
 use magnus::{function, Object, RHash, Ruby};
 use crate::fetch;
-use crate::io::{Client, ClientOptions};
+use crate::tcp::{Client, ClientOptions};
 
 pub(crate) fn define_init(_ruby: &Ruby) -> Result<(), magnus::Error> {
     module_mavrik().define_singleton_method("init", function!(init, 1))?;

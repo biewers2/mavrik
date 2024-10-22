@@ -1,5 +1,5 @@
 use crate::events::{MavrikEvent, TcpEvent};
-use crate::io::handle_tcp_stream::{handle_tcp_stream, HandleTcpStreamParams};
+use crate::tcp::handle_tcp_stream::{handle_tcp_stream, HandleTcpStreamParams};
 use crate::service::Service;
 use libc::{getppid, kill, SIGUSR1};
 use log::{info, warn};

@@ -2,7 +2,7 @@ use std::ops::DerefMut;
 use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use crate::events::{MavrikRequest, MavrikResponse};
-use crate::io::util::{read_deserialized_async, write_serialized_async};
+use crate::tcp::util::{read_deserialized_async, write_serialized_async};
 
 pub struct ClientOptions {
     pub host: String,

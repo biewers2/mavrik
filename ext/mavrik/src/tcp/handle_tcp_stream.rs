@@ -4,7 +4,7 @@ use tokio::net::TcpStream;
 use tokio::select;
 use tokio::sync::{mpsc, oneshot};
 use crate::events::{ExeEvent, GeneralEvent, MavrikEvent, MavrikRequest, MavrikResponse, Task};
-use crate::io::util::{read_deserialized_async, write_serialized_async};
+use crate::tcp::util::{read_deserialized_async, write_serialized_async};
 
 pub struct HandleTcpStreamParams {
     pub event_tx: mpsc::Sender<MavrikEvent>,

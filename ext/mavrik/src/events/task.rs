@@ -3,6 +3,8 @@ use std::ops::DerefMut;
 use std::sync::Mutex;
 use std::time::SystemTime;
 
+pub type TaskId = String;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NewTask {
     pub queue: String,
@@ -13,15 +15,21 @@ pub struct NewTask {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Task {
-    pub id: String,
+    pub id: TaskId,
     pub queue: String,
     pub definition: String, // repr class path
     pub input_args: String, // repr JSON array
     pub input_kwargs: String, // repr JSON object
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AwaitedTask {
+    pub id: TaskId,
+    pub value: String
+}
+
 impl Task {
-    fn new_id() -> String {
+    fn new_id() -> TaskId {
         // (timestamp, counter)
         static LAST: Mutex<(u128, usize)> = Mutex::new((0, 0));
 
