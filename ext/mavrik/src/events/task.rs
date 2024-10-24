@@ -8,24 +8,33 @@ pub type TaskId = String;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NewTask {
     pub queue: String,
-    pub definition: String, // repr class path
-    pub input_args: String, // repr JSON array
-    pub input_kwargs: String, // repr JSON object
+    pub ctx: String
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Task {
     pub id: TaskId,
     pub queue: String,
-    pub definition: String, // repr class path
-    pub input_args: String, // repr JSON array
-    pub input_kwargs: String, // repr JSON object
+    pub ctx: String
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AwaitedTask {
     pub id: TaskId,
-    pub value: String
+    pub result: TaskResult
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum TaskResult {
+    Success {
+        result: serde_json::Value
+    },
+    Failure {
+        class: String,
+        message: String,
+        backtrace: Vec<String>
+    }
 }
 
 impl Task {
@@ -57,9 +66,9 @@ impl Task {
 
 impl From<NewTask> for Task {
     fn from(value: NewTask) -> Self {
-        let NewTask { queue, definition, input_args, input_kwargs } = value;
+        let NewTask { queue, ctx } = value;
         let id = Self::new_id();
 
-        Self { id, queue, definition, input_args, input_kwargs }
+        Self { id, queue, ctx }
     }
 }

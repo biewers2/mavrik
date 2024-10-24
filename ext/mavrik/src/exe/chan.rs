@@ -1,13 +1,14 @@
+use anyhow::Context;
 use tokio::sync::mpsc;
-use crate::events::{Task, TaskId};
+use crate::events::{Task, TaskId, TaskResult};
 use crate::exe::ThreadId;
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum ThreadMessage {
     ThreadReady(ThreadId),
     Awaited {
         task_id: TaskId,
-        value: String
+        task_result: TaskResult
     }
 }
 
@@ -27,16 +28,16 @@ impl ExecutorChannel {
 
     pub async fn thread_ready(&self, thread_id: ThreadId) -> Result<(), anyhow::Error> {
         let message = ThreadMessage::ThreadReady(thread_id);
-        self.thread_tx.send(message).await?;
+        self.thread_tx.send(message).await.context("sending ready thread from thread")?;
         Ok(())
     }
 
-    pub async fn task_awaited(&self, task_id: TaskId, value: String) -> Result<(), anyhow::Error> {
+    pub async fn task_complete(&self, task_id: TaskId, task_result: TaskResult) -> Result<(), anyhow::Error> {
         let message = ThreadMessage::Awaited {
             task_id,
-            value
+            task_result
         };
-        self.thread_tx.send(message).await?;
+        self.thread_tx.send(message).await.context("sending awaited from thread")?;
         Ok(())
     }
 }

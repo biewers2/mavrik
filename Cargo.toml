@@ -3,5 +3,5 @@
 # in the ext/ directory.
 
 [workspace]
-members = ["./ext/mavrik"]
 resolver = "2"
+members = ["ext/mavrik"]

@@ -1,11 +1,12 @@
 use crate::events::{MavrikEvent, TcpEvent};
-use crate::tcp::handle_tcp_stream::{handle_tcp_stream, HandleTcpStreamParams};
-use crate::service::Service;
+use crate::tcp::{TcpClientHandler, TcpClientHandlerParams};
+use crate::service::{start_service, Service, ServiceChannel};
 use libc::{getppid, kill, SIGUSR1};
 use log::{info, warn};
 use std::net::SocketAddr;
+use anyhow::Context;
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 
 /// Options for configuring the TCP listener.
@@ -36,12 +37,12 @@ pub struct MavrikTcpListener {
     event_tx: mpsc::Sender<MavrikEvent>,
 
     /// Set of asynchronous tasks handling client streams.
-    conns: JoinSet<Result<(), anyhow::Error>>,
+    handlers: JoinSet<Result<(), anyhow::Error>>,
 
     /// Oneshot senders for terminating the client stream handling tasks.
     /// Allows this listener to safely ensure the tasks in the internal join set return successfully before exiting to the parent
     /// task.
-    conn_term_txs: Vec<oneshot::Sender<()>>
+    handler_chans: Vec<ServiceChannel<()>>
 }
 
 impl MavrikTcpListener {
@@ -65,10 +66,10 @@ impl MavrikTcpListener {
         let TcpListenerParams { event_tx } = params;
         
         let inner = TcpListener::bind(format!("{host}:{port}")).await?;
-        let conns = JoinSet::new();
-        let conn_term_txs = Vec::new();
+        let handlers = JoinSet::new();
+        let handler_chans = Vec::new();
 
-        info!("Accepting TCP connections on {host}:{port}");
+        info!(host, port; "Accepting TCP connections");
 
         if signal_parent_ready {
             match unsafe { kill(getppid(), SIGUSR1) } {
@@ -77,7 +78,7 @@ impl MavrikTcpListener {
             }
         }
 
-        Ok(Self { inner, event_tx, conns, conn_term_txs })
+        Ok(Self { inner, event_tx, handlers, handler_chans })
     }
 }
 
@@ -85,36 +86,40 @@ impl Service for MavrikTcpListener {
     type TaskOutput = Result<(TcpStream, SocketAddr), anyhow::Error>;
     type Message = TcpEvent;
 
-    async fn call_task(&mut self) -> Self::TaskOutput {
-        let conn = self.inner.accept().await?;
-        Ok(conn)
+    // Accept TCP connections from client
+    async fn poll_task(&mut self) -> Self::TaskOutput {
+        self.inner.accept().await.context("failed to accept TCP connections")
     }
 
+    // Handle TCP connections from client by spawning a new service task.
     async fn on_task_ready(&mut self, conn: Self::TaskOutput) -> Result<(), anyhow::Error> {
-        let (conn_term_tx, conn_term_rx) = oneshot::channel();
-        
         let (stream, addr) = conn?;
-        info!("Accepted connection from {addr:?}");
+        info!(addr:?; "Accepted connection");
         
-        self.conns.spawn(handle_tcp_stream(stream, HandleTcpStreamParams {
-            event_tx: self.event_tx.clone(),
-            term_rx: conn_term_rx
-        }));
-        self.conn_term_txs.push(conn_term_tx);
+        let event_tx = self.event_tx.clone();
+        let handler = TcpClientHandler::new(stream, TcpClientHandlerParams { event_tx });
+        let (handler, chan) = start_service("TCP-handler", handler);
+        
+        self.handlers.spawn(handler);
+        self.handler_chans.push(chan);
         Ok(())
     }
 
-    async fn on_message(&mut self, _message: Self::Message) -> Result<(), anyhow::Error> {
-        Ok(())
-    }
-
+    // Tell client handlers to terminate upon termination of this service.
     async fn on_terminate(&mut self) -> Result<(), anyhow::Error> {
-        while let Some(term_tx) = self.conn_term_txs.pop() {
-            let _ = term_tx.send(());
+        // Don't drop channel until all handlers are joined.
+        // This avoids the TX being dropped while RX is still receiving resulting in an unexpected error
+        // during termination.
+        let mut term_chans = vec![];
+        while let Some(mut chan) = self.handler_chans.pop() {
+            chan.terminate();
+            term_chans.push(chan);
         }
 
-        while let Some(result) = self.conns.join_next().await {
-            result??;
+        while let Some(result) = self.handlers.join_next().await {
+            result
+                .context("failed to join client handler")?
+                .context("client handler failed during execution")?;
         }
 
         Ok(())

@@ -40,12 +40,15 @@ module Mavrik
         task = JSON.generate(
           type: :new_task,
           queue: :default,
-          definition: self.name,
-          input_args: JSON.generate(args),
-          input_kwargs: JSON.generate(kwargs)
+          ctx: JSON.generate({
+            definition: self.name,
+            args:,
+            kwargs:
+          })
         )
 
-        task_id = Mavrik.client.send_message(task)
+        task_id_str = Mavrik.client.send_message(task)
+        task_id = JSON.parse(task_id_str)
 
         Future.new(task_id:)
       end

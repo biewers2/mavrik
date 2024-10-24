@@ -27,7 +27,7 @@ impl Service for SignalListener {
     type TaskOutput = Option<c_int>;
     type Message = SigEvent;
 
-    async fn call_task(&mut self) -> Self::TaskOutput {
+    async fn poll_task(&mut self) -> Self::TaskOutput {
         self.signals.next().await
     }
 

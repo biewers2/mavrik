@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::future::{Future, IntoFuture};
+use anyhow::Context;
 use log::{debug, trace};
 use tokio::select;
 use tokio::sync::{mpsc, oneshot};
@@ -8,7 +9,7 @@ pub trait Service {
     type TaskOutput: Debug;
     type Message: Debug;
 
-    async fn call_task(&mut self) -> Self::TaskOutput;
+    async fn poll_task(&mut self) -> Self::TaskOutput;
 
     async fn on_task_ready(&mut self, output: Self::TaskOutput) -> Result<(), anyhow::Error>;
 
@@ -17,7 +18,9 @@ pub trait Service {
         Ok(())
     }
 
-    async fn on_terminate(&mut self) -> Result<(), anyhow::Error>;
+    async fn on_terminate(&mut self) -> Result<(), anyhow::Error> {
+        Ok(())
+    }
 }
 
 pub struct ServiceChannel<M> {
@@ -31,7 +34,8 @@ where
     M: Send + Sync + 'static
 {
     pub async fn send(&self, message: M) -> Result<(), anyhow::Error> {
-        self.message_tx.send(message).await?;
+        let name = &self.name;
+        self.message_tx.send(message).await.context(format!("{name}-channel: failed to message service"))?;
         Ok(())
     }
 
@@ -55,33 +59,34 @@ where
     let channel = ServiceChannel { name: name.clone(), message_tx, term_tx };
     
     let task = async move {
-        debug!("{name}: Starting");
+        debug!(service = name; "Starting");
         
         let service = &mut service;
         let message_rx = &mut message_rx;
         let term_rx = &mut term_rx;
         loop {
             select! {
-                value = service.call_task() => {
-                    trace!("{name}: task ready with value {value:?}");
-                    service.on_task_ready(value).await?;
+                value = service.poll_task() => {
+                    trace!(service = name, value:?; "Task ready");
+                    service.on_task_ready(value).await.context(format!("{name}: task ready handling failed"))?;
                 },
 
                 Some(message) = message_rx.recv() => {
-                    trace!("{name}: received message with value {message:?}");
-                    service.on_message(message).await?;
+                    trace!(service = name, message:?; "Received message");
+                    service.on_message(message).await.context(format!("{name}: message handling failed"))?;
                 },
 
                 result = term_rx.into_future() => {
-                    result?;
-                    debug!("{name}: terminating");
-                    service.on_terminate().await?;
+                    result.context(format!("{name}: error receiving oneshot term"))?;
+                        
+                    debug!(service = name; "Terminating");
+                    service.on_terminate().await.context(format!("{name}: termination handling failed"))?;
                     break;
                 }
             }
         }
 
-        debug!("{name}: finished");
+        debug!(service = name; "Completed");
         Result::<(), anyhow::Error>::Ok(())
     };
 

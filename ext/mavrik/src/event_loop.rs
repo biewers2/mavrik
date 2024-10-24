@@ -29,7 +29,7 @@ pub async fn start_event_loop(options: MavrikOptions) -> Result<(), anyhow::Erro
 
     let event_loop_task = async move {
         while let Some(event) = event_rx.recv().await {
-            trace!("Received event {event:?} in event loop");
+            trace!(event:?; "Received event in event loop");
 
             match event {
                 MavrikEvent::General(GeneralEvent::Terminate) => {

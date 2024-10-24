@@ -1,10 +1,10 @@
 use crate::event_loop::{start_event_loop, MavrikOptions};
 use crate::tcp::TcpListenerOptions;
-use crate::rb::{mavrik_error, module_mavrik};
+use crate::rb::module_mavrik;
 use crate::runtime::async_runtime;
 use crate::exe::TaskExecutorOptions;
 use crate::{fetch, without_gvl};
-use log::{debug, info};
+use log::info;
 use magnus::{function, Object, RHash, Ruby};
 
 pub(crate) fn define_main(_ruby: &Ruby) -> Result<(), magnus::Error> {
@@ -13,8 +13,7 @@ pub(crate) fn define_main(_ruby: &Ruby) -> Result<(), magnus::Error> {
 }
 
 fn main(options: RHash) -> Result<(), magnus::Error> {
-    info!("Starting Mavrik server");
-    debug!("Running with options {options:?}");
+    info!(options:?; "Starting Mavrik server");
 
     let host = fetch!(options, :"host", "127.0.0.1".to_owned())?;
     let port = fetch!(options, :"port", 3001)?;
@@ -34,9 +33,9 @@ fn main(options: RHash) -> Result<(), magnus::Error> {
                 }
             };
             
-            start_event_loop(options).await.map_err(mavrik_error)
+            start_event_loop(options).await.expect("server error occurred");
         })
-    })?;
+    });
 
     info!("Mavrik server stopped");
     Ok(())
