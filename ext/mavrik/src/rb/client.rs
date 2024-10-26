@@ -1,3 +1,4 @@
+use anyhow::Context;
 use log::trace;
 use crate::events::MavrikRequest;
 use crate::rb::{mavrik_error, module_mavrik};
@@ -22,14 +23,14 @@ impl RbClient {
     #[inline]
     fn send(&self, message: &str) -> Result<String, anyhow::Error> {
         async_runtime().block_on(async move {
-            let request = serde_json::from_str::<MavrikRequest>(message)?;
+            let request = serde_json::from_str(message).context("deserializing request from message")?;
             trace!(request:?; "Sending request over TCP");
 
-            self.0.send(&request).await?;
-            let response = self.0.recv().await?;
+            self.0.send(&request).await.context("sending request to server")?;
+            let response = self.0.recv().await.context("receiving response from server")?;
 
             trace!(response:?; "Received response over TCP");
-            let value = serde_json::to_string(&response)?;
+            let value = serde_json::to_string(&response).context("serialize response to message")?;
             Ok(value)    
         })
     }

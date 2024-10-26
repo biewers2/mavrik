@@ -1,5 +1,5 @@
 use anyhow::Context;
-use crate::events::{AwaitedTask, ExeEvent, GeneralEvent, MavrikEvent, MavrikRequest, MavrikResponse, Task};
+use crate::events::{ExeEvent, GeneralEvent, MavrikEvent, MavrikRequest, MavrikResponse, Task};
 use crate::service::Service;
 use crate::tcp::util::{read_deserialized, write_serialized};
 use log::{error, info, trace};
@@ -45,11 +45,13 @@ impl Service for TcpClientHandler {
             // New tasks are send to the task executor to be executed.
             // The generated task ID is sent back to the client.
             MavrikRequest::NewTask(new_task) => {
+                let (value_tx, value_rx) = oneshot::channel();
+                
                 let task = Task::from(new_task);
-                let task_id = task.id.clone();
-                let event = MavrikEvent::Exe(ExeEvent::NewTask(task));
+                let event = MavrikEvent::Exe(ExeEvent::NewTask { task, value_tx });
                 self.event_tx.send(event).await.context("sending new task event from client handler")?;
-
+                
+                let task_id = value_rx.await.context("awaiting task ID from oneshot channel")?;
                 MavrikResponse::NewTaskId(task_id)
             },
             
@@ -60,8 +62,8 @@ impl Service for TcpClientHandler {
                 let event = MavrikEvent::Exe(ExeEvent::AwaitTask { task_id, value_tx });
                 self.event_tx.send(event).await.context("sending await task event from client handler")?;
                 
-                let AwaitedTask { result, .. } = value_rx.await.context("awaiting task result from oneshot channel")?;
-                MavrikResponse::AwaitedTask(result)
+                let task_result = value_rx.await.context("awaiting task result from oneshot channel")?;
+                MavrikResponse::CompletedTask(task_result)
             },
 
             // Tell the event loop to terminate all services when the client requests so.

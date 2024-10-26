@@ -1,17 +1,14 @@
-use crate::events::{AwaitedTask, ExeEvent, MavrikEvent, Task, TaskId, TaskResult};
-use crate::rb::in_ruby;
-use log::{debug, error, trace};
-use std::collections::HashMap;
-use std::future::Future;
-use std::pin::{pin, Pin};
-use std::sync::Arc;
-use std::task::{Context, Poll};
-use anyhow::anyhow;
-use magnus::value::ReprValue;
-use tokio::sync::{mpsc, Mutex};
+use crate::events::{ExeEvent, MavrikEvent, Task, TaskId, TaskResult};
 use crate::exe::chan::{ExecutorChannel, ThreadMessage};
 use crate::exe::thread_main::rb_thread_main;
+use crate::rb::in_ruby;
 use crate::service::Service;
+use anyhow::{anyhow, Context};
+use log::{debug, error, trace};
+use magnus::value::ReprValue;
+use std::collections::HashMap;
+use tokio::sync::mpsc;
+use crate::mem::TaskMemory;
 
 /// ID associated with a Ruby thread created by the task executor.
 pub type ThreadId = usize;
@@ -23,9 +20,14 @@ pub struct TaskExecutorOptions {
 }
 
 /// Parameters for creating the task executor.
-pub struct TaskExecutorParams {
+pub struct TaskExecutorParams<M>
+where
+    M: TaskMemory
+{
     /// Where to send events to.
-    pub event_tx: mpsc::Sender<MavrikEvent>
+    pub event_tx: mpsc::Sender<MavrikEvent>,
+    
+    pub task_memory: M
 }
 
 /// Entry in the thread table.
@@ -38,72 +40,31 @@ struct ThreadTableEntry {
     thread: magnus::Thread,
 
     /// Where to send tasks to for this thread to execute.
-    task_tx: mpsc::Sender<Task>
-}
-
-/// A future that waits for a task to be completed by a Ruby thread.
-struct AwaitTaskFuture {
-    /// ID of the task.
-    task_id: TaskId,
-
-    /// Reference to the task result buffer.
-    /// This is where the future looks for the task ID when polled.
-    buf: Arc<Mutex<HashMap<TaskId, TaskResult>>>
-}
-
-impl AwaitTaskFuture {
-    /// Create a new future to await for the completion of a task.
-    ///
-    /// # Arguments
-    ///
-    /// `task_id` - ID of the task to wait for.
-    /// `buf` - Reference to the table storing the task results.
-    ///
-    pub fn new(task_id: TaskId, results_table: Arc<Mutex<HashMap<TaskId, TaskResult>>>) -> Self {
-        Self { task_id, buf: results_table }
-    }
-}
-
-impl Future for AwaitTaskFuture {
-    type Output = AwaitedTask;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let buf = pin!(self.buf.lock());
-        match buf.poll(cx) {
-            // Continue pending if lock isn't ready.
-            Poll::Pending => Poll::Pending,
-
-            // When ready, check if the task ID is present in the results table by removing it.
-            Poll::Ready(mut buf) => match buf.remove(&self.task_id) {
-                Some(result) => Poll::Ready(AwaitedTask {
-                    id: self.task_id.clone(),
-                    result
-                }),
-                None => Poll::Pending
-            }
-        }
-    }
+    task_tx: mpsc::Sender<(TaskId, Task)>
 }
 
 /// Task executor service, used to execute tasks concurrently in Ruby threads.
-pub struct TaskExecutor {
+pub struct TaskExecutor<M>
+where
+    M: TaskMemory
+{
+    /// Where tasks and task results are stored and buffered.
+    task_memory: M,
+    
     /// Table mapping thread IDs to threads and associated structs.
     thread_table: HashMap<ThreadId, ThreadTableEntry>,
 
-    /// Table mapping task IDs to their results.
-    results_table: Arc<Mutex<HashMap<TaskId, TaskResult>>>,
-
     /// Where to receive messages from threads.
     thread_rx: mpsc::Receiver<ThreadMessage>,
-
-    /// Enqueued tasks to be picked up by threads as they become available.
-    task_buf: Vec<Task>,
 
     /// List of threads available to process tasks listed by their IDs.
     ready_buf: Vec<ThreadId>
 }
 
-impl TaskExecutor {
+impl<M> TaskExecutor<M>
+where
+    M: TaskMemory
+{
     /// Create a new task executor service.
     ///
     /// # Arguments
@@ -111,9 +72,9 @@ impl TaskExecutor {
     /// `options` - Options for configuring the task executor.
     /// `params` - Values for constructing the task executor.
     ///
-    pub fn new(options: TaskExecutorOptions, params: TaskExecutorParams) -> Result<Self, anyhow::Error> {
+    pub fn new(options: TaskExecutorOptions, params: TaskExecutorParams<M>) -> Result<Self, anyhow::Error> {
         let TaskExecutorOptions { rb_thread_count, .. } = options;
-        let TaskExecutorParams { .. } = params;
+        let TaskExecutorParams { task_memory, .. } = params;
 
         let (thread_tx, thread_rx) = mpsc::channel(10);
         let thread_table = in_ruby(|r| {
@@ -127,42 +88,49 @@ impl TaskExecutor {
             }
             table
         });
-
+        
         Ok(Self {
+            task_memory,
             thread_table,
             thread_rx,
-            task_buf: vec![],
-            results_table: Arc::new(Mutex::new(HashMap::new())),
             ready_buf: vec![],
         })
     }
 
-    pub async fn execute(&mut self, task: Task) -> Result<(), anyhow::Error> {
-        match self.ready_buf.pop() {
-            Some(thread_id) => self.run_task_on_thread(thread_id, task).await?,
+    pub async fn execute_task(&mut self, task: Task) -> Result<TaskId, anyhow::Error> {
+        let task_id = self.task_memory.push_queue(task).await.context("pushing task to memory")?;
+        if let Some(thread_id) = self.ready_buf.pop() {
+            self.execute_on_thread(thread_id).await.context("executing tasks on thread")?;
+        }
+        Ok(task_id)
+    }
+
+    pub async fn execute_on_thread(&mut self, thread_id: ThreadId) -> Result<(), anyhow::Error> {
+        let result = self.task_memory.pop_queue().await.context("popping task off memory queue")?;
+        match result {
+            Some((task_id, task)) => self.run_task_on_thread(thread_id, task_id, task).await?,
             None => {
-                trace!("No ready threads, pushing task on to queue");
-                self.task_buf.push(task);
+                trace!("No tasks in queue, pushing thread on to queue");
+                self.ready_buf.push(thread_id);
             }
         }
         Ok(())
     }
 
-    pub async fn get_task_result(&self, task_id: TaskId) -> AwaitedTask {
-        AwaitTaskFuture::new(task_id, self.results_table.clone()).await
-    }
-
-    async fn run_task_on_thread(&self, thread_id: ThreadId, task: Task) -> Result<(), anyhow::Error> {
+    async fn run_task_on_thread(&self, thread_id: ThreadId, task_id: TaskId, task: Task) -> Result<(), anyhow::Error> {
         trace!(thread_id, task:?; "Running on thread");
 
         let entry = self.thread_table.get(&thread_id).ok_or(anyhow!("thread with ID {thread_id} not found"))?;
-        entry.task_tx.send(task).await?;
+        entry.task_tx.send((task_id, task)).await.context("sending task to thread")?;
 
         Ok(())
     }
 }
 
-impl Service for TaskExecutor {
+impl<M> Service for TaskExecutor<M>
+where
+    M: TaskMemory
+{
     type TaskOutput = Option<ThreadMessage>;
     type Message = ExeEvent;
 
@@ -173,19 +141,13 @@ impl Service for TaskExecutor {
     async fn on_task_ready(&mut self, message: Self::TaskOutput) -> Result<(), anyhow::Error> {
         match message {
             Some(ThreadMessage::ThreadReady(thread_id)) => {
-                match self.task_buf.pop() {
-                    Some(task) => self.run_task_on_thread(thread_id, task).await?,
-                    None => {
-                        trace!("No tasks in queue, pushing thread on to queue");
-                        self.ready_buf.push(thread_id);
-                    }
-                }
+                self.execute_on_thread(thread_id).await.context("executing tasks on thread")?;
                 Ok(())
             },
 
-            Some(ThreadMessage::Awaited { task_id, task_result }) => {
-                trace!(task_id:?, task_result:?; "Task awaited");
-                self.results_table.lock().await.insert(task_id, task_result);
+            Some(ThreadMessage::Completed { task_id, task_result }) => {
+                trace!(task_id:?, task_result:?; "Task completed");
+                self.task_memory.insert_completed(task_id, task_result).await.context("adding task to completed memory")?;
                 Ok(())
             },
 
@@ -195,20 +157,34 @@ impl Service for TaskExecutor {
 
     async fn on_message(&mut self, message: Self::Message) -> Result<(), anyhow::Error> {
         match message {
-            ExeEvent::NewTask(task) => {
-                self.execute(task).await?
+            ExeEvent::NewTask {
+                task,
+                value_tx
+            } => {
+                let task_id = self.execute_task(task).await.context("executing new task from message")?;
+                if let Err(task_id) = value_tx.send(task_id) {
+                    error!(task_id; "Could not send task ID over oneshot channel");
+                }
             },
 
             ExeEvent::AwaitTask {
                 task_id,
                 value_tx
             } => {
-                let awaited_task = self.get_task_result(task_id).await;
-                let result = value_tx.send(awaited_task);
+                match self.task_memory.remove_completed(task_id).await.context("getting completed task")? {
+                    // Task completed, send result to caller.
+                    Some((task_id, task_result)) => {
+                        // Put the value back in the buffer if it failed to send.
+                        if let Err(task_result) = value_tx.send(task_result) {
+                            self.task_memory.insert_completed(task_id, task_result).await.context("adding completed task back to memory")?;
+                        }
+                    },
 
-                // Put the value back in the buffer if it failed to send.
-                if let Err(AwaitedTask { id, result }) = result {
-                    self.results_table.lock().await.insert(id, result);
+                    // No task w/ ID found, send failure back.
+                    None => {
+                        let failure = TaskResult::from(anyhow!("no task w/ ID {task_id} found"));
+                        let _ = value_tx.send(failure);
+                    }
                 }
             }
         };
@@ -226,7 +202,8 @@ impl Service for TaskExecutor {
                 { entry.task_tx; } // drop TX
 
                 debug!(thread_id; "Joining thread");
-                if let Err(e) = entry.thread.funcall_public::<_, _, magnus::Value>("join", (30,)) {
+                let result: Result<magnus::Value, magnus::Error> = entry.thread.funcall_public("join", (30,));
+                if let Err(e) = result {
                     error!(thread_id, e:?; "Could not join thread");
                 }
             }

@@ -8,6 +8,7 @@ pub mod runtime;
 pub mod event_loop;
 pub mod service;
 pub mod exe;
+pub mod mem;
 
 #[magnus::init]
 fn init(ruby: &magnus::Ruby) -> Result<(), magnus::Error> {

@@ -1,4 +1,4 @@
-use crate::events::{AwaitedTask, NewTask, Task, TaskId, TaskResult};
+use crate::events::{NewTask, Task, TaskId, TaskResult};
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 
@@ -25,7 +25,7 @@ pub enum MavrikResponse {
     NewTaskId(TaskId),
     
     /// The result of waiting for a task to complete.
-    AwaitedTask(TaskResult),
+    CompletedTask(TaskResult),
 
     /// Whether the request for termination was fulfilled.
     Terminated(bool)
@@ -59,11 +59,14 @@ pub enum GeneralEvent {
 
 #[derive(Debug)]
 pub enum ExeEvent {
-    NewTask(Task),
+    NewTask {
+        task: Task,
+        value_tx: oneshot::Sender<TaskId>
+    },
 
     AwaitTask {
         task_id: TaskId,
-        value_tx: oneshot::Sender<AwaitedTask>
+        value_tx: oneshot::Sender<TaskResult>
     }
 }
 

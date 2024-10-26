@@ -1,9 +1,10 @@
+use crate::rb::class_mavrik_error;
+use log::kv::{ToValue, Value};
 use serde::{Deserialize, Serialize};
-use std::ops::DerefMut;
-use std::sync::Mutex;
-use std::time::SystemTime;
+use std::fmt::{Display, Formatter};
 
-pub type TaskId = String;
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, Hash, Ord, PartialOrd, Eq, PartialEq)]
+pub struct TaskId(pub [u8; 20]);
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NewTask {
@@ -13,15 +14,8 @@ pub struct NewTask {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Task {
-    pub id: TaskId,
     pub queue: String,
     pub ctx: String
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AwaitedTask {
-    pub id: TaskId,
-    pub result: TaskResult
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -37,38 +31,45 @@ pub enum TaskResult {
     }
 }
 
-impl Task {
-    fn new_id() -> TaskId {
-        // (timestamp, counter)
-        static LAST: Mutex<(u128, usize)> = Mutex::new((0, 0));
+impl Display for TaskId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        // Serde JSON doesn't support u128 :( so we use two u64s.
+        
+        let mut time_0_buf = [0u8; 8];
+        let mut time_1_buf = [0u8; 8];
+        let mut count_buf = [0u8; 4];
+        
+        time_0_buf.clone_from_slice(&self.0[..8]);
+        time_1_buf.clone_from_slice(&self.0[8..16]);
+        count_buf.clone_from_slice(&self.0[16..]);
+        
+        let time_0: u64 = u64::from_be_bytes(time_0_buf);
+        let time_1: u64 = u64::from_be_bytes(time_1_buf);
+        let count: u32 = u32::from_be_bytes(count_buf);
+        
+        write!(f, "{}_{}-{}", time_0, time_1, count)
+    }
+}
 
-        let mut guard = LAST.lock().unwrap();
-        let (last_timestamp, last_count) = guard.deref_mut();
-
-        // Use system timestamp as primary identifier
-        let timestamp = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_millis();
-
-        // Append counter to end in case of conflict with timestamp.
-        if *last_timestamp == timestamp {
-            *last_count += 1;
-        } else {
-            *last_timestamp = timestamp;
-            *last_count = 0;
-        };
-        let n = *last_count;
-
-        format!("{timestamp}-{n}")
+impl ToValue for TaskId {
+    fn to_value(&self) -> Value {
+        Value::from_display(self)
     }
 }
 
 impl From<NewTask> for Task {
     fn from(value: NewTask) -> Self {
         let NewTask { queue, ctx } = value;
-        let id = Self::new_id();
+        Self { queue, ctx }
+    }
+}
 
-        Self { id, queue, ctx }
+impl From<anyhow::Error> for TaskResult {
+    fn from(value: anyhow::Error) -> Self {
+        TaskResult::Failure {
+            class: class_mavrik_error().to_string(),
+            message: format!("{value}"),
+            backtrace: vec![]
+        }
     }
 }

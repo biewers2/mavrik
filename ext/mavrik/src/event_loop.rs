@@ -6,6 +6,7 @@ use crate::exe::{TaskExecutor, TaskExecutorOptions, TaskExecutorParams};
 use log::{info, trace};
 use tokio::sync::mpsc;
 use tokio::{pin, try_join};
+use crate::mem::TasksInMemory;
 
 pub struct MavrikOptions {
     pub exe_options: TaskExecutorOptions,
@@ -15,7 +16,8 @@ pub struct MavrikOptions {
 pub async fn start_event_loop(options: MavrikOptions) -> Result<(), anyhow::Error> {
     let (event_tx, mut event_rx) = mpsc::channel::<MavrikEvent>(1000);
 
-    let params = TaskExecutorParams { event_tx: event_tx.clone() };
+    let task_memory = TasksInMemory::new();
+    let params = TaskExecutorParams { task_memory, event_tx: event_tx.clone() };
     let exe = TaskExecutor::new(options.exe_options, params)?;
     let (exe_task, mut exe_chan) = start_service("EXE", exe);
 

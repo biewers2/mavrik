@@ -6,23 +6,23 @@ use crate::exe::ThreadId;
 #[derive(Debug, Eq, PartialEq)]
 pub enum ThreadMessage {
     ThreadReady(ThreadId),
-    Awaited {
+    Completed {
         task_id: TaskId,
         task_result: TaskResult
     }
 }
 
 pub struct ExecutorChannel {
-    task_rx: mpsc::Receiver<Task>,
+    task_rx: mpsc::Receiver<(TaskId, Task)>,
     thread_tx: mpsc::Sender<ThreadMessage>
 }
 
 impl ExecutorChannel {
-    pub fn new(task_rx: mpsc::Receiver<Task>, thread_tx: mpsc::Sender<ThreadMessage>) -> Self {
+    pub fn new(task_rx: mpsc::Receiver<(TaskId, Task)>, thread_tx: mpsc::Sender<ThreadMessage>) -> Self {
         Self { task_rx, thread_tx }
     }
     
-    pub async fn next_task(&mut self) -> Option<Task> {
+    pub async fn next_task(&mut self) -> Option<(TaskId, Task)> {
         self.task_rx.recv().await
     }
 
@@ -33,7 +33,7 @@ impl ExecutorChannel {
     }
 
     pub async fn task_complete(&self, task_id: TaskId, task_result: TaskResult) -> Result<(), anyhow::Error> {
-        let message = ThreadMessage::Awaited {
+        let message = ThreadMessage::Completed {
             task_id,
             task_result
         };

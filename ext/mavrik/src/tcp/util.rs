@@ -3,6 +3,7 @@ use log::trace;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::fmt::Debug;
+use anyhow::Context;
 
 /// Read and deserialize a string from a stream.
 /// 
@@ -16,12 +17,12 @@ where
     T: DeserializeOwned + Debug
 {
     let mut len_buf = [0u8; size_of::<usize>()];
-    stream.read_exact(&mut len_buf).await?;
+    stream.read_exact(&mut len_buf).await.context("reading exact length")?;
     let len = usize::from_be_bytes(len_buf);
-
-    let mut request = vec![0u8; len];
-    stream.read_exact(&mut request).await?;
-    let value = serde_json::from_slice(&request)?;
+    
+    let mut payload = vec![0u8; len];
+    stream.read_exact(&mut payload).await.context("reading exact payload")?;
+    let value = serde_json::from_slice(&payload).context("deserializing payload as JSON")?;
 
     trace!(len, value:?; "Received bytes over TCP");
     Ok(value)   
@@ -38,10 +39,10 @@ where
     AW: AsyncWrite + Unpin,
     T: Serialize + Debug
 {
-    let payload = serde_json::to_string(&value)?;
+    let payload = serde_json::to_string(&value).context("serializing payload to JSON")?;
     let len = payload.len();
-    stream.write(&len.to_be_bytes()).await?;
-    stream.write_all(payload.as_bytes()).await?;
+    stream.write(&len.to_be_bytes()).await.context("writing length")?;
+    stream.write_all(payload.as_bytes()).await.context("writing payload")?;
 
     trace!(len, payload:?; "Sent bytes over TCP");
     Ok(())

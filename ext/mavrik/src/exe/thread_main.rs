@@ -30,19 +30,18 @@ async fn thread_loop(thread_id: ThreadId, execute_task: magnus::Value, exe: &mut
     exe.thread_ready(thread_id).await.context(format!("sending thread ready (thread ID {thread_id})"))?;
 
     while let Some(task) = exe.next_task().await {
-        let Task { id, ctx, .. } = &task;
-        trace!(task_id = id, ctx:?; "Task executing");
+        let (task_id, Task { ctx, .. }) = task;
+        trace!(task_id, ctx:?; "Task executing");
 
         // Any errors raised in the task will be captured in `TaskResult`
-        let result = with_gvl!({ 
-            execute_task.funcall_public::<_, (&str,), String>("call", (ctx,))
-        });
-        let task_result = result.map_err(|e| anyhow!("{e}")).context(format!("task execution (task ID {id})"))?;
-        let task_result = serde_json::from_str(&task_result).context(format!("deserializing task result (task ID {id})"))?;
+        let args = (ctx.as_str(),);
+        let result = with_gvl!({ execute_task.funcall_public::<_, (&str,), String>("call", args) });
+        let task_result = result.map_err(|e| anyhow!("{e}")).context("task execution")?;
+        let task_result = serde_json::from_str(&task_result).context("deserializing task result")?;
         
-        trace!(task_id = id, ctx:?; "Task complete");
-        exe.task_complete(id.clone(), task_result).await.context(format!("sending task result to executor (task ID {id})"))?;
-        exe.thread_ready(thread_id).await.context(format!("sending thread ready (thread ID {thread_id})"))?;
+        trace!(task_id, ctx:?; "Task complete");
+        exe.task_complete(task_id, task_result).await.context("sending task result to executor")?;
+        exe.thread_ready(thread_id).await.context("sending thread ready")?;
     }
 
     Ok(())
@@ -51,7 +50,7 @@ async fn thread_loop(thread_id: ThreadId, execute_task: magnus::Value, exe: &mut
 #[cfg(test)]
 mod tests {
     use std::future::Future;
-    use crate::events::{Task, TaskResult};
+    use crate::events::{Task, TaskId, TaskResult};
     use crate::exe::chan::{ExecutorChannel, ThreadMessage};
     use crate::exe::thread_main::rb_thread_main;
     use crate::rb::in_ruby;
@@ -97,7 +96,7 @@ mod tests {
         Ok(())
     }
     
-    fn run_in_thread(thread_id: ThreadId) -> Result<(mpsc::Receiver<ThreadMessage>, mpsc::Sender<Task>), anyhow::Error> {
+    fn run_in_thread(thread_id: ThreadId) -> Result<(mpsc::Receiver<ThreadMessage>, mpsc::Sender<(TaskId, Task)>), anyhow::Error> {
         in_ruby::<Result<_, anyhow::Error>>(|r| {
             let (thread_tx, thread_rx) = mpsc::channel(1);
             let (task_tx, task_rx) = mpsc::channel(1);
@@ -115,8 +114,8 @@ mod tests {
             define_ruby_constants,
             || async move {
                 let thread_id = 0usize;
+                let task_id = TaskId(123, 0);
                 let task = Task {
-                    id: "123-4".to_string(),
                     queue: "default".to_string(),
                     ctx: json!({
                         "definition": "TestTask",
@@ -128,11 +127,11 @@ mod tests {
                 let (mut thread_rx, task_tx) = run_in_thread(thread_id)?;
 
                 assert_eq!(thread_rx.recv().await, Some(ThreadMessage::ThreadReady(thread_id)));
-                task_tx.send(task).await?;
-                assert_eq!(thread_rx.recv().await, Some(ThreadMessage::Awaited {
-                    task_id: "123-4".to_owned(),
+                task_tx.send((task_id, task)).await?;
+                assert_eq!(thread_rx.recv().await, Some(ThreadMessage::Completed {
+                    task_id,
                     task_result: TaskResult::Success {
-                        result: "hello, world!".to_string()
+                        result: serde_json::Value::String("hello, world!".to_string())
                     }
                 }));
                 assert_eq!(thread_rx.recv().await, Some(ThreadMessage::ThreadReady(thread_id)));

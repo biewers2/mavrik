@@ -1,6 +1,6 @@
 use magnus::error::RubyUnavailableError;
 use magnus::{ExceptionClass, IntoValue, Module, RHash, RModule, Ruby, TryConvert};
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 
 #[macro_export]
 macro_rules! without_gvl {
@@ -50,16 +50,18 @@ pub fn module_mavrik() -> RModule {
     )
 }
 
+pub fn class_mavrik_error() -> ExceptionClass {
+    module_mavrik()
+        .const_get::<_, ExceptionClass>("Error")
+        .expect("Error class not defined")
+}
+
 pub fn mavrik_error<S>(error: S) -> magnus::Error
 where
-    S: Display
+    S: Debug
 {
-    let error_class = module_mavrik()
-        .const_get::<_, ExceptionClass>("Error")
-        .expect("Error class not defined");
-    let message = format!("{error}");
-
-    magnus::Error::new(error_class, message)
+    let message = format!("{error:?}");
+    magnus::Error::new(class_mavrik_error(), message)
 }
 
 pub fn in_ruby<T>(mut func: impl FnMut(Ruby) -> T) -> T {
