@@ -19,7 +19,6 @@ impl SignalListener {
 
 impl MavrikService for SignalListener {
     type TaskOutput = Option<c_int>;
-    type Message = ();
 
     async fn poll_task(&mut self) -> Self::TaskOutput {
         self.signals.next().await

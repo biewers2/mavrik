@@ -1,22 +1,55 @@
-use crate::mavrik::MavrikOptions;
 use crate::executor::thread_main::rb_thread_main;
+use crate::mavrik::MavrikOptions;
+use crate::messaging::{Task, TaskId, TaskResult};
 use crate::rb::in_ruby;
 use crate::service::MavrikService;
 use crate::store::ProcessStore;
 use log::{debug, error};
 use magnus::value::ReprValue;
+use std::collections::HashMap;
+use tokio::select;
 use tokio::sync::mpsc;
-use crate::messaging::TaskId;
 
 /// ID associated with a Ruby thread created by the task executor.
 pub type ThreadId = usize;
 
-pub struct TaskExecutor {
-    threads: Vec<magnus::Thread>,
-    term_txs: Vec<mpsc::Sender<()>>,
+#[derive(Debug)]
+pub enum ThreadMessage {
+    ThreadReady(ThreadId),
+    TaskComplete((TaskId, TaskResult))
 }
 
-impl TaskExecutor {
+#[derive(Debug)]
+pub enum TaskOutputKind {
+    ThreadReady(ThreadId),
+    TaskComplete((TaskId, TaskResult)),
+    NextTask((TaskId, Task))
+}
+
+impl From<ThreadMessage> for TaskOutputKind {
+    fn from(value: ThreadMessage) -> Self {
+        match value {
+            ThreadMessage::ThreadReady(id) => TaskOutputKind::ThreadReady(id),
+            ThreadMessage::TaskComplete((id, result)) => TaskOutputKind::TaskComplete((id, result)),
+        }
+    }
+}
+
+pub struct ThreadTableEntry {
+    thread: magnus::Thread,
+    task_tx: mpsc::Sender<(TaskId, Task)>,
+}
+
+
+pub struct TaskExecutor<Store> {
+    store: Store,
+    thread_table: HashMap<ThreadId, ThreadTableEntry>,
+    messages_rx: mpsc::Receiver<ThreadMessage>,
+    task_buf: Vec<(TaskId, Task)>,
+    thread_ready_buf: Vec<ThreadId>,
+}
+
+impl<Store> TaskExecutor<Store> {
     /// Create a new task executor service.
     ///
     /// # Arguments
@@ -24,44 +57,96 @@ impl TaskExecutor {
     /// `options` - Options for configuring the task executor.
     /// `params` - Values for constructing the task executor.
     ///
-    pub fn new<Store>(options: &MavrikOptions, store: Store) -> Result<Self, anyhow::Error>
-    where
-        Store: ProcessStore<Id = TaskId, Error = anyhow::Error> + Clone + Send + Sync + 'static,
-    {
+    pub fn new(options: &MavrikOptions, store: Store) -> Result<Self, anyhow::Error> {
         let rb_thread_count = options.get("rb_thread_count", 4usize)?;
 
-        let mut threads = vec![];
-        let mut term_txs = vec![];
-
+        let mut thread_table = HashMap::new();
+        let (messages_tx, messages_rx) = mpsc::channel(rb_thread_count);
+        let task_buf = Vec::new();
+        let thread_ready_buf = Vec::new();
+        
         in_ruby(|r| {
-            for _ in 0..rb_thread_count {
-                let (term_tx, term_rx) = mpsc::channel(1);
-                let store = store.clone();
-                let thread = r.thread_create_from_fn(move |r| rb_thread_main(r, store, term_rx));
+            for thread_id in 0..rb_thread_count {
+                let (task_tx, task_rx) = mpsc::channel(1);
+                let messages_tx = messages_tx.clone();
+                let thread = r.thread_create_from_fn(move |r| rb_thread_main(r, thread_id, messages_tx, task_rx));
 
-                term_txs.push(term_tx);
-                threads.push(thread);
+                thread_table.insert(thread_id, ThreadTableEntry { thread, task_tx });
             }
         });
 
-        Ok(Self { threads, term_txs })
+        Ok(Self { store, thread_table, messages_rx, task_buf, thread_ready_buf })
     }
 }
 
-impl MavrikService for TaskExecutor {
-    type TaskOutput = ();
-    type Message = ();
+impl<Store> MavrikService for TaskExecutor<Store>
+where
+    Store: ProcessStore<Id = TaskId, Error = anyhow::Error>
+{
+    type TaskOutput = Result<TaskOutputKind, anyhow::Error>;
+
+    async fn poll_task(&mut self) -> Self::TaskOutput {
+        select! { 
+            result = self.store.next(), if self.task_buf.len() < 100 => {
+                Ok(TaskOutputKind::NextTask(result?))
+            },
+            
+            Some(message) = self.messages_rx.recv() => {
+                Ok(message.into())
+            }
+        }
+    }
+
+    async fn on_task_ready(&mut self, output: Self::TaskOutput) -> Result<(), anyhow::Error> {
+        match output? {
+            TaskOutputKind::NextTask((task_id, task)) => {
+                match self.thread_ready_buf.pop() {
+                    Some(thread_id) => {
+                        let entry = self.thread_table.get(&thread_id).expect("thread not found");
+                        entry.task_tx.send((task_id, task)).await?;
+                    },
+                    None => {
+                        self.task_buf.push((task_id, task));
+                    }
+                }
+                Ok(())
+            }
+            
+            TaskOutputKind::ThreadReady(thread_id) => {
+                match self.task_buf.pop() {
+                    Some((task_id, task)) => {
+                        let entry = self.thread_table.get(&thread_id).expect("thread not found");
+                        entry.task_tx.send((task_id, task)).await?;
+                    },
+                    None => {
+                        self.thread_ready_buf.push(thread_id);
+                    }
+                }
+                Ok(())
+            },
+            
+            TaskOutputKind::TaskComplete((task_id, task_result)) => {
+                self.store.publish(task_id, task_result).await?;
+                Ok(())
+            }
+        }
+    }
 
     async fn on_terminate(&mut self) -> Result<(), anyhow::Error> {
-        while let Some(term_tx) = self.term_txs.pop() {
-            term_tx.send(()).await?;
-        }
+        let thread_ids = self.thread_table
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
         
-        while let Some(thread) = self.threads.pop() {
-            debug!("Joining thread");
-            let result: Result<magnus::Value, magnus::Error> = thread.funcall_public("join", (30,));
-            if let Err(e) = result {
-                error!(e:?; "Could not join thread");
+        for thread_id in thread_ids {
+            if let Some(entry) = self.thread_table.remove(&thread_id) {
+                { entry.task_tx; } // Drop senders
+                
+                debug!("Joining thread");
+                let result = entry.thread.funcall_public::<_, _, magnus::Value>("join", (30,));
+                if let Err(e) = result {
+                    error!(e:?; "Could not join thread");
+                }
             }
         }
 

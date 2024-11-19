@@ -47,9 +47,9 @@ pub trait ProcessStore {
     ///
     /// A tuple containing the ID of the entry and the entry itself.
     ///
-    async fn next<D>(&self) -> Result<(Self::Id, D), Self::Error>
+    fn next<D>(&self) -> impl Future<Output = Result<(Self::Id, D), Self::Error>> + Send
     where
-        D: DeserializeOwned;   
+        D: DeserializeOwned;
     
     /// Publish the result of processing an entry.
     ///
@@ -58,9 +58,9 @@ pub trait ProcessStore {
     /// `id` - The ID of the entry that was processed.
     /// `output` - The result of processing the entry.
     /// 
-    async fn publish<S>(&self, id: Self::Id, output: S) -> Result<(), Self::Error>
+    fn publish<S>(&self, id: Self::Id, output: S) -> impl Future<Output = Result<(), Self::Error>> + Send
     where
-        S: Serialize;
+        S: Serialize + Send;
 }
 
 /// A store that can be inspected and managed from an external actor.

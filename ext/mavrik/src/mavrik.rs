@@ -5,7 +5,6 @@ use crate::store::TasksInMemory;
 use crate::tcp::MavrikTcpListener;
 use anyhow::anyhow;
 use log::info;
-use magnus::value::ReprValue;
 use magnus::{RHash, Symbol, TryConvert};
 use std::sync::Arc;
 use tokio::sync::oneshot;

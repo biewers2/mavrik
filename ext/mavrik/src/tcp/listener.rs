@@ -16,7 +16,7 @@ pub struct MavrikTcpListener<Store> {
     inner: TcpListener,
     store: Store,
     handlers: JoinSet<Result<(), anyhow::Error>>,
-    handler_chans: Vec<ServiceChannel<()>>
+    handler_chans: Vec<ServiceChannel>
 }
 
 impl<Store> MavrikTcpListener<Store> {
@@ -60,7 +60,6 @@ where
         + Clone + Send + Sync + 'static,
 {
     type TaskOutput = Result<(TcpStream, SocketAddr), anyhow::Error>;
-    type Message = ();
 
     // Accept TCP connections from client
     async fn poll_task(&mut self) -> Self::TaskOutput {

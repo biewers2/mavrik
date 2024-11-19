@@ -79,9 +79,9 @@ impl PushStore for TasksInMemory {
     {
         let value = serde_json::to_string(&value)?;
         let id = Self::next_id();
-        
+
         let mut table = self.table.lock().await;
-        
+
         trace!(id, value:?; "Pushing on to store");
         table.insert(id, TaskTableEntry::Enqueued(value));
 
@@ -99,7 +99,7 @@ impl PullStore for TasksInMemory {
     {
         let output = PullTask::new(id, &self).await?;
         trace!(id, output:?; "Pulled from store");
-        
+
         let output = serde_json::from_str(&output)?;
         Ok(output)
     }
@@ -115,18 +115,18 @@ impl ProcessStore for TasksInMemory {
     {
         let (id, value) = NextTask::new(&self).await?;
         trace!(id, value:?; "Pulling next task for processing");
-        
+
         let value = serde_json::from_str(&value)?;
         Ok((id, value))
     }
 
     async fn publish<S>(&self, id: Self::Id, output: S) -> Result<(), Self::Error>
     where
-        S: Serialize
+        S: Serialize + Send
     {
         let output = serde_json::to_string(&output)?;
         trace!(id, output:?; "Publishing completed task");
-        
+
         let mut table = self.table.lock().await;
         table.insert(id, TaskTableEntry::Complete(output));
         
@@ -158,10 +158,12 @@ impl Future for PullTask {
             return Poll::Ready(Err(anyhow!("aborted")))
         }
 
+        trace!("PullTask: locking table");
         let table = pin!(self.table.lock());
         match table.poll(cx) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(mut table) => {
+                trace!(table:?; "PullTask: table ready, removing task entry");
                 match table.remove_entry(&self.task_id) {
                     Some((_, TaskTableEntry::Complete(output))) => {
                         Poll::Ready(Ok(output))
@@ -201,15 +203,18 @@ impl Future for NextTask {
             return Poll::Ready(Err(anyhow!("aborted")))
         }
         
+        trace!("NextTask: locking table");
         let table = pin!(self.table.lock());
         match table.poll(cx) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(mut table) => {
+                trace!(table:?; "NextTask: table ready, getting next ID");
                 let id = match table.keys().next() {
                     Some(id) => id.clone(),
                     None => return Poll::Pending
                 };
                 
+                trace!(table:?, id; "NextTask: removing table entry");
                 match table.remove_entry(&id) {
                     Some((task_id, TaskTableEntry::Enqueued(task))) => {
                         table.insert(task_id, TaskTableEntry::Busy);

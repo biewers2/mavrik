@@ -1,29 +1,26 @@
+use crate::executor::{ThreadId, ThreadMessage};
 use crate::messaging::{Task, TaskId};
 use crate::rb::{mavrik_error, module_mavrik};
 use crate::runtime::async_runtime;
-use crate::store::ProcessStore;
 use crate::{with_gvl, without_gvl};
 use anyhow::{anyhow, Context};
-use log::{error, trace};
+use log::{error, info, trace};
 use magnus::value::ReprValue;
 use magnus::{Class, Module, RClass, Ruby};
-use tokio::select;
 use tokio::sync::mpsc;
 
-pub fn rb_thread_main<Store>(
+pub fn rb_thread_main(
     _ruby: &Ruby,
-    mut store: Store,
-    mut term_rx: mpsc::Receiver<()>,
-) -> Result<(), magnus::Error>
-where
-    Store: ProcessStore<Id = TaskId, Error = anyhow::Error>,
-{
+    thread_id: ThreadId,
+    mut messages_tx: mpsc::Sender<ThreadMessage>,
+    mut task_rx: mpsc::Receiver<(TaskId, Task)>,
+) -> Result<(), magnus::Error> {
     let execute_task = module_mavrik()
         .const_get::<_, RClass>("ExecuteTask")?
         .new_instance(())?;
 
     let result = without_gvl!({
-        async_runtime().block_on(thread_loop(execute_task, &mut store, &mut term_rx))
+        async_runtime().block_on(thread_loop(thread_id, execute_task, &mut messages_tx, &mut task_rx))
     });
 
     if let Err(e) = &result {
@@ -33,32 +30,27 @@ where
     result.map_err(mavrik_error)
 }
 
-async fn thread_loop<Store>(
+async fn thread_loop(
+    thread_id: ThreadId,
     execute_task: magnus::Value,
-    store: &mut Store,
-    term_rx: &mut mpsc::Receiver<()>,
-) -> Result<(), anyhow::Error>
-where
-    Store: ProcessStore<Id = TaskId, Error = anyhow::Error>,
-{
-    loop {
-        select! {
-            result = store.next::<Task>() => {
-                let (task_id, Task { ctx, .. }) = result?;
-                trace!(task_id, ctx:?; "Task executing");
+    messages_tx: &mut mpsc::Sender<ThreadMessage>,
+    task_rx: &mut mpsc::Receiver<(TaskId, Task)>,
+) -> Result<(), anyhow::Error> {
+    // Notify executor this thread is ready
+    messages_tx.send(ThreadMessage::ThreadReady(thread_id)).await?;
+    
+    while let Some((task_id, task)) = task_rx.recv().await {
+        let Task { ctx, .. } = task;
+        trace!(ctx:?; "Task executing");
 
-                // Any errors raised in the task will be captured in `TaskResult`
-                let args = (ctx.as_str(),);
-                let result = with_gvl!({ execute_task.funcall_public::<_, (&str,), String>("call", args) });
-                let task_result = result.map_err(|e| anyhow!("{e}")).context("task execution")?;
-                let task_result = serde_json::from_str(&task_result).context("deserializing task result")?;
+        // Any errors raised in the task will be captured in `TaskResult`
+        let args = (ctx.as_str(),);
+        let result = with_gvl!({ execute_task.funcall_public::<_, (&str,), String>("call", args) });
+        let task_result = result.map_err(|e| anyhow!("{e}")).context("task execution")?;
+        let task_result = serde_json::from_str(&task_result).context("deserializing task result")?;
 
-                trace!(task_id, ctx:?; "Task complete");
-                store.publish(task_id, task_result).await?;
-            },
-
-            _ = term_rx.recv() => break
-        }
+        trace!(ctx:?; "Task complete");
+        messages_tx.send(ThreadMessage::TaskComplete((task_id, task_result))).await?;
     }
 
     Ok(())

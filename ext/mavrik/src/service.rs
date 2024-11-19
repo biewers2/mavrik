@@ -3,11 +3,10 @@ use std::future::{pending, Future, IntoFuture};
 use anyhow::Context;
 use log::{debug, trace};
 use tokio::select;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::oneshot;
 
 pub trait MavrikService {
     type TaskOutput: Debug;
-    type Message: Debug;
 
     async fn poll_task(&mut self) -> Self::TaskOutput {
         pending().await
@@ -18,32 +17,17 @@ pub trait MavrikService {
         Ok(())
     }
 
-    #[allow(unused_variables)]
-    async fn on_message(&mut self, message: Self::Message) -> Result<(), anyhow::Error> {
-        Ok(())
-    }
-
     async fn on_terminate(&mut self) -> Result<(), anyhow::Error> {
         Ok(())
     }
 }
 
-pub struct ServiceChannel<M> {
+pub struct ServiceChannel {
     name: String,
-    message_tx: mpsc::Sender<M>,
     term_tx: Option<oneshot::Sender<()>>
 }
 
-impl<M> ServiceChannel<M>
-where
-    M: Send + Sync + 'static
-{
-    pub async fn send(&self, message: M) -> Result<(), anyhow::Error> {
-        let name = &self.name;
-        self.message_tx.send(message).await.context(format!("{name}-channel: failed to message service"))?;
-        Ok(())
-    }
-
+impl ServiceChannel {
     pub fn terminate(&mut self) {
         if let Some(term_tx) = self.term_tx.take() {
             debug!("{}-channel: Sending termination signal", self.name);
@@ -52,7 +36,7 @@ where
     }
 }
 
-pub fn start_service<N, S>(name: N, mut service: S) -> (impl Future<Output = Result<(), anyhow::Error>>, ServiceChannel<S::Message>)
+pub fn start_service<N, S>(name: N, mut service: S) -> (impl Future<Output = Result<(), anyhow::Error>>, ServiceChannel)
 where
     N: Into<String>,
     S: MavrikService
@@ -60,25 +44,18 @@ where
     let name = name.into();
     let (term_tx, mut term_rx) = oneshot::channel();
     let term_tx = Some(term_tx);
-    let (message_tx, mut message_rx) = mpsc::channel(100);
-    let channel = ServiceChannel { name: name.clone(), message_tx, term_tx };
+    let channel = ServiceChannel { name: name.clone(), term_tx };
     
     let task = async move {
         debug!(service = name; "Starting");
         
         let service = &mut service;
-        let message_rx = &mut message_rx;
         let term_rx = &mut term_rx;
         loop {
             select! {
                 value = service.poll_task() => {
                     trace!(service = name, value:?; "Task ready");
                     service.on_task_ready(value).await.context(format!("{name}: task ready handling failed"))?;
-                },
-
-                Some(message) = message_rx.recv() => {
-                    trace!(service = name, message:?; "Received message");
-                    service.on_message(message).await.context(format!("{name}: message handling failed"))?;
                 },
 
                 result = term_rx.into_future() => {

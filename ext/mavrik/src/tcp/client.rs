@@ -36,7 +36,7 @@ impl MavrikTcpClient {
         let address = format!("{}:{}", options.host, options.port);
         let stream = TcpStream::connect(address).await.context("failed to connect via TCP")?;
         let stream = Mutex::new(stream);
-
+        
         Ok(Self { stream })
     }
 

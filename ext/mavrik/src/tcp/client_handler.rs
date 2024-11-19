@@ -26,7 +26,6 @@ where
         + 'static,
 {
     type TaskOutput = Result<MavrikRequest, anyhow::Error>;
-    type Message = ();
 
     async fn poll_task(&mut self) -> Self::TaskOutput {
         read_deserialized(&mut self.stream)
