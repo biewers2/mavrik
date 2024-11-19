@@ -1,6 +1,7 @@
-use crate::events::{NewTask, Task, TaskId, TaskResult};
+use crate::events::{NewTask, Task, TaskResult};
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
+use crate::events::task_id::TaskId;
 
 /// A request made from a TCP client to the TCP listener service ("TCP").
 #[derive(Debug, Serialize, Deserialize)]

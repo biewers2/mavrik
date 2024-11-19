@@ -114,7 +114,7 @@ mod tests {
             define_ruby_constants,
             || async move {
                 let thread_id = 0usize;
-                let task_id = TaskId(123, 0);
+                let task_id = TaskId::from_parts(123, 0);
                 let task = Task {
                     queue: "default".to_string(),
                     ctx: json!({

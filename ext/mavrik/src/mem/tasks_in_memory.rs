@@ -106,10 +106,7 @@ impl TasksInMemory {
         };
         let n = *last_count;
 
-        let mut buf = [0u8; 20];
-        (&mut buf[..16]).clone_from_slice(&timestamp.to_be_bytes());
-        (&mut buf[16..]).clone_from_slice(&n.to_be_bytes());
-        TaskId(buf)
+        TaskId::from_parts(timestamp, n)
     }
 }
 
