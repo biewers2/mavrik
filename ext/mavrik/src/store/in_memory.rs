@@ -18,28 +18,25 @@ use std::ops::DerefMut;
 use std::pin::{pin, Pin};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::task::{Context, Poll};
+use std::task::{Context, Poll, Waker};
 use std::time::SystemTime;
 use tokio::sync::Mutex;
 
 #[derive(Debug, Clone)]
-enum TaskTableEntry {
-    Enqueued(String),
-    Busy,
-    Complete(String)
-}
-
-#[derive(Debug, Clone)]
 pub struct TasksInMemory {
-    table: Arc<Mutex<HashMap<TaskId, TaskTableEntry>>>,
-    abort_futures: Arc<AtomicBool>
+    queue_wakers: Arc<Mutex<Vec<Waker>>>,
+    queue: Arc<Mutex<Vec<(TaskId, String)>>>,
+    completed_wakers: Arc<Mutex<HashMap<TaskId, Waker>>>,
+    completed: Arc<Mutex<HashMap<TaskId, String>>>,
 }
 
 impl TasksInMemory {
     pub fn new() -> Self {
         Self {
-            table: Arc::new(Mutex::new(HashMap::new())),
-            abort_futures: Arc::new(AtomicBool::new(false))
+            queue_wakers: Arc::new(Mutex::new(Vec::new())),
+            queue: Arc::new(Mutex::new(Vec::new())),
+            completed_wakers: Arc::new(Mutex::new(HashMap::new())),
+            completed: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -80,10 +77,12 @@ impl PushStore for TasksInMemory {
         let value = serde_json::to_string(&value)?;
         let id = Self::next_id();
 
-        let mut table = self.table.lock().await;
-
-        trace!(id, value:?; "Pushing on to store");
-        table.insert(id, TaskTableEntry::Enqueued(value));
+        let mut queue = self.queue.lock().await;
+        queue.push((id, value));
+        let mut wakers = self.queue_wakers.lock().await;
+        if let Some(waker) = wakers.pop() {
+            waker.wake();
+        }
 
         Ok(id)
     }
@@ -127,8 +126,12 @@ impl ProcessStore for TasksInMemory {
         let output = serde_json::to_string(&output)?;
         trace!(id, output:?; "Publishing completed task");
 
-        let mut table = self.table.lock().await;
-        table.insert(id, TaskTableEntry::Complete(output));
+        let mut completed = self.completed.lock().await;
+        completed.insert(id, output);
+        let mut wakers = self.completed_wakers.lock().await;
+        if let Some(waker) = wakers.remove(&id) {
+            waker.wake();
+        }
         
         Ok(())
     }
@@ -136,16 +139,16 @@ impl ProcessStore for TasksInMemory {
 
 struct PullTask {
     task_id: TaskId,
-    table: Arc<Mutex<HashMap<TaskId, TaskTableEntry>>>,
-    abort: Arc<AtomicBool>
+    completed_wakers: Arc<Mutex<HashMap<TaskId, Waker>>>,
+    completed: Arc<Mutex<HashMap<TaskId, String>>>,
 }
 
 impl PullTask {
     pub fn new(task_id: TaskId, tasks_in_memory: &TasksInMemory) -> Self {
         Self {
             task_id,
-            table: tasks_in_memory.table.clone(),
-            abort: tasks_in_memory.abort_futures.clone()
+            completed_wakers: tasks_in_memory.completed_wakers.clone(),
+            completed: tasks_in_memory.completed.clone(),
         }
     }
 }
@@ -154,43 +157,42 @@ impl Future for PullTask {
     type Output = Result<String, anyhow::Error>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.abort.load(Ordering::Acquire) {
-            return Poll::Ready(Err(anyhow!("aborted")))
-        }
-
-        trace!("PullTask: locking table");
-        let table = pin!(self.table.lock());
-        match table.poll(cx) {
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(mut table) => {
-                trace!(table:?; "PullTask: table ready, removing task entry");
-                match table.remove_entry(&self.task_id) {
-                    Some((_, TaskTableEntry::Complete(output))) => {
-                        Poll::Ready(Ok(output))
-                    },
-                    Some((task_id, entry)) => {
-                        table.insert(task_id, entry);
-                        Poll::Pending
-                    },
-                    None => {
-                        Poll::Pending
-                    }
+        let completed = pin!(self.completed.lock());
+        match completed.poll(cx) {
+            Poll::Pending => return Poll::Pending,
+            Poll::Ready(mut completed) => {
+                if let Some((_, task)) = completed.remove_entry(&self.task_id) {
+                    return Poll::Ready(Ok(task))
                 }
             }
-        }
+        };
+        
+        let wakers = pin!(self.completed_wakers.lock());
+        match wakers.poll(cx) {
+            Poll::Pending => return Poll::Pending,
+            Poll::Ready(mut wakers) => {
+                if let Some(waker) = wakers.get_mut(&self.task_id) {
+                    waker.clone_from(cx.waker());
+                } else {
+                    wakers.insert(self.task_id, cx.waker().clone());
+                };
+            },
+        };
+        
+        Poll::Pending
     }
 }
 
 struct NextTask {
-    table: Arc<Mutex<HashMap<TaskId, TaskTableEntry>>>,
-    abort: Arc<AtomicBool>
+    queue_wakers: Arc<Mutex<Vec<Waker>>>,
+    queue: Arc<Mutex<Vec<(TaskId, String)>>>,
 }
 
 impl NextTask {
     pub fn new(tasks_in_memory: &TasksInMemory) -> Self {
         Self {
-            table: tasks_in_memory.table.clone(),
-            abort: tasks_in_memory.abort_futures.clone()
+            queue_wakers: tasks_in_memory.queue_wakers.clone(),
+            queue: tasks_in_memory.queue.clone()
         }
     }
 }
@@ -199,36 +201,24 @@ impl Future for NextTask {
     type Output = Result<(TaskId, String), anyhow::Error>;
     
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        if self.abort.load(Ordering::Acquire) {
-            return Poll::Ready(Err(anyhow!("aborted")))
-        }
-        
-        trace!("NextTask: locking table");
-        let table = pin!(self.table.lock());
-        match table.poll(cx) {
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(mut table) => {
-                trace!(table:?; "NextTask: table ready, getting next ID");
-                let id = match table.keys().next() {
-                    Some(id) => id.clone(),
-                    None => return Poll::Pending
-                };
-                
-                trace!(table:?, id; "NextTask: removing table entry");
-                match table.remove_entry(&id) {
-                    Some((task_id, TaskTableEntry::Enqueued(task))) => {
-                        table.insert(task_id, TaskTableEntry::Busy);
-                        Poll::Ready(Ok((task_id, task)))
-                    },
-                    Some((task_id, entry)) => {
-                        table.insert(task_id, entry);
-                        Poll::Pending
-                    },
-                    None => {
-                        Poll::Pending
-                    }
-                }       
+        let queue = pin!(self.queue.lock());
+        match queue.poll(cx) {
+            Poll::Pending => return Poll::Pending,
+            Poll::Ready(mut completed) => {
+                if let Some(task) = completed.pop() {
+                    return Poll::Ready(Ok(task))
+                }
             }
-        }
+        };
+
+        let wakers = pin!(self.queue_wakers.lock());
+        match wakers.poll(cx) {
+            Poll::Pending => return Poll::Pending,
+            Poll::Ready(mut wakers) => {
+                wakers.push(cx.waker().clone());
+            },
+        };
+
+        Poll::Pending
     }
 }

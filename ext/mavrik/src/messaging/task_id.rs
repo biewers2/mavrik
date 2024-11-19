@@ -2,9 +2,9 @@ use anyhow::anyhow;
 use log::kv::{ToValue, Value};
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 
-#[derive(Debug, Copy, Clone, Hash, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Copy, Clone, Hash, Ord, PartialOrd, Eq, PartialEq)]
 pub struct TaskId([u8; 20]);
 
 impl TaskId {
@@ -61,6 +61,12 @@ impl TryFrom<String> for TaskId {
     }
 }
 
+impl Debug for TaskId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", String::from(self))
+    }
+}
+
 impl Display for TaskId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", String::from(self))
@@ -70,6 +76,12 @@ impl Display for TaskId {
 impl ToValue for TaskId {
     fn to_value(&self) -> Value {
         Value::from_display(self)
+    }
+}
+
+impl From<&TaskId> for TaskId {
+    fn from(value: &TaskId) -> Self {
+        value.clone()
     }
 }
 

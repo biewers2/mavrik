@@ -23,10 +23,6 @@ signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
 version = "0.7"
 features = ["embed"]
 
-[dependencies.rb-sys]
-version = "0.9"
-features = ["no-link-ruby"]
-
 [dependencies.tokio]
 version = "1.40"
 features = ["rt", "io-util", "macros", "sync"]

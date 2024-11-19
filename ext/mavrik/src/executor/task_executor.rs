@@ -4,7 +4,7 @@ use crate::messaging::{Task, TaskId, TaskResult};
 use crate::rb::in_ruby;
 use crate::service::MavrikService;
 use crate::store::ProcessStore;
-use log::{debug, error};
+use log::{debug, error, trace};
 use magnus::value::ReprValue;
 use std::collections::HashMap;
 use tokio::select;

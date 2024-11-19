@@ -408,7 +408,6 @@ dependencies = [
  "libc",
  "log",
  "magnus",
- "rb-sys",
  "rutie",
  "serde",
  "serde_json",
