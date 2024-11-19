@@ -97,7 +97,7 @@ impl<'de> Deserialize<'de> for TaskId {
 #[cfg(test)]
 mod tests {
     use anyhow::anyhow;
-    use crate::events::task_id::TaskId;
+    use crate::messaging::task_id::TaskId;
 
     #[test]
     fn task_id_displays() {

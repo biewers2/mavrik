@@ -1,6 +1,6 @@
 use magnus::error::RubyUnavailableError;
 use magnus::{ExceptionClass, IntoValue, Module, RHash, RModule, Ruby, TryConvert};
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 
 #[macro_export]
 macro_rules! without_gvl {

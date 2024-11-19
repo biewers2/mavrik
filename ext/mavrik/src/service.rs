@@ -1,17 +1,22 @@
 use std::fmt::Debug;
-use std::future::{Future, IntoFuture};
+use std::future::{pending, Future, IntoFuture};
 use anyhow::Context;
 use log::{debug, trace};
 use tokio::select;
 use tokio::sync::{mpsc, oneshot};
 
-pub trait Service {
+pub trait MavrikService {
     type TaskOutput: Debug;
     type Message: Debug;
 
-    async fn poll_task(&mut self) -> Self::TaskOutput;
+    async fn poll_task(&mut self) -> Self::TaskOutput {
+        pending().await
+    }
 
-    async fn on_task_ready(&mut self, output: Self::TaskOutput) -> Result<(), anyhow::Error>;
+    #[allow(unused_variables)]
+    async fn on_task_ready(&mut self, output: Self::TaskOutput) -> Result<(), anyhow::Error> {
+        Ok(())
+    }
 
     #[allow(unused_variables)]
     async fn on_message(&mut self, message: Self::Message) -> Result<(), anyhow::Error> {
@@ -50,7 +55,7 @@ where
 pub fn start_service<N, S>(name: N, mut service: S) -> (impl Future<Output = Result<(), anyhow::Error>>, ServiceChannel<S::Message>)
 where
     N: Into<String>,
-    S: Service
+    S: MavrikService
 {
     let name = name.into();
     let (term_tx, mut term_rx) = oneshot::channel();

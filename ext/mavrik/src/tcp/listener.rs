@@ -1,51 +1,25 @@
-use crate::events::{MavrikEvent, TcpEvent};
-use crate::tcp::{TcpClientHandler, TcpClientHandlerParams};
-use crate::service::{start_service, Service, ServiceChannel};
+use crate::mavrik::MavrikOptions;
+use crate::messaging::TaskId;
+use crate::service::{start_service, MavrikService, ServiceChannel};
+use crate::store::{PullStore, PushStore};
+use crate::tcp::TcpClientHandler;
+use anyhow::Context;
 use libc::{getppid, kill, SIGUSR1};
 use log::{info, warn};
 use std::net::SocketAddr;
-use anyhow::Context;
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 
-/// Options for configuring the TCP listener.
-pub struct TcpListenerOptions {
-    /// The host to bind to.
-    pub host: String,
-
-    /// The port to bind to.
-    pub port: u16,
-
-    /// Whether to send SIGUSR1 to the parent process, indicating the TCP listener is ready to accept connections.
-    pub signal_parent_ready: bool
-}
-
-/// Parameters for constructing the TCP listener.
-pub struct TcpListenerParams {
-    /// Where to send Mavrik events.
-    pub event_tx: mpsc::Sender<MavrikEvent>,
-}
-
 /// Mavrik's TCP listener struct, used to accept and manage asynchronous connections from clients and send received
-/// events to the event loop.
-pub struct MavrikTcpListener {
-    /// The inner tokio TCP listener.
+/// messaging to the event loop.
+pub struct MavrikTcpListener<Store> {
     inner: TcpListener,
-
-    /// Where to send Mavrik events.
-    event_tx: mpsc::Sender<MavrikEvent>,
-
-    /// Set of asynchronous tasks handling client streams.
+    store: Store,
     handlers: JoinSet<Result<(), anyhow::Error>>,
-
-    /// Oneshot senders for terminating the client stream handling tasks.
-    /// Allows this listener to safely ensure the tasks in the internal join set return successfully before exiting to the parent
-    /// task.
     handler_chans: Vec<ServiceChannel<()>>
 }
 
-impl MavrikTcpListener {
+impl<Store> MavrikTcpListener<Store> {
     /// Bind this listener to an address with a Mavrik event sender.
     ///
     /// # Arguments
@@ -57,13 +31,10 @@ impl MavrikTcpListener {
     ///
     /// A result containing a new Mavrik TCP listener on OK, otherwise any error that occurred.
     ///
-    pub async fn new(options: TcpListenerOptions, params: TcpListenerParams) -> Result<Self, anyhow::Error> {
-        let TcpListenerOptions {
-            host,
-            port,
-            signal_parent_ready
-        } = options;
-        let TcpListenerParams { event_tx } = params;
+    pub async fn new(options: &MavrikOptions, store: Store) -> Result<Self, anyhow::Error> {
+        let host = options.get("host", "127.0.0.1".to_string())?;
+        let port = options.get("port", 3001)?;
+        let signal_parent_ready = options.get("signal_parent_ready", false)?;
         
         let inner = TcpListener::bind(format!("{host}:{port}")).await?;
         let handlers = JoinSet::new();
@@ -78,13 +49,18 @@ impl MavrikTcpListener {
             }
         }
 
-        Ok(Self { inner, event_tx, handlers, handler_chans })
+        Ok(Self { inner, store, handlers, handler_chans })
     }
 }
 
-impl Service for MavrikTcpListener {
+impl<Store> MavrikService for MavrikTcpListener<Store>
+where
+    Store: PushStore<Id = TaskId, Error = anyhow::Error>
+        + PullStore<Id = TaskId, Error = anyhow::Error>
+        + Clone + Send + Sync + 'static,
+{
     type TaskOutput = Result<(TcpStream, SocketAddr), anyhow::Error>;
-    type Message = TcpEvent;
+    type Message = ();
 
     // Accept TCP connections from client
     async fn poll_task(&mut self) -> Self::TaskOutput {
@@ -96,8 +72,7 @@ impl Service for MavrikTcpListener {
         let (stream, addr) = conn?;
         info!(addr:?; "Accepted connection");
         
-        let event_tx = self.event_tx.clone();
-        let handler = TcpClientHandler::new(stream, TcpClientHandlerParams { event_tx });
+        let handler = TcpClientHandler::new(stream, self.store.clone());
         let (handler, chan) = start_service("TCP-handler", handler);
         
         self.handlers.spawn(handler);

@@ -2,7 +2,7 @@ use std::ops::DerefMut;
 use anyhow::Context;
 use tokio::net::TcpStream;
 use tokio::sync::Mutex;
-use crate::events::{MavrikRequest, MavrikResponse};
+use crate::messaging::{MavrikRequest, MavrikResponse};
 use crate::tcp::{read_deserialized, write_serialized};
 
 /// Options for creating a TCP client.
