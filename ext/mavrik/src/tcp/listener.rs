@@ -1,7 +1,7 @@
 use crate::mavrik::MavrikOptions;
 use crate::messaging::TaskId;
 use crate::service::{start_service, MavrikService, ServiceChannel};
-use crate::store::{PullStore, PushStore};
+use crate::store::{PullStore, PushStore, QueryStore};
 use crate::tcp::TcpClientHandler;
 use anyhow::Context;
 use libc::{getppid, kill, SIGUSR1};
@@ -57,6 +57,7 @@ impl<Store> MavrikService for MavrikTcpListener<Store>
 where
     Store: PushStore<Id = TaskId, Error = anyhow::Error>
         + PullStore<Id = TaskId, Error = anyhow::Error>
+        + QueryStore<Error = anyhow::Error>
         + Clone + Send + Sync + 'static,
 {
     type TaskOutput = Result<(TcpStream, SocketAddr), anyhow::Error>;

@@ -26,7 +26,6 @@ RSpec.describe "send 1000 large input tasks", server: true, performance: true do
     end
 
     expect(task_ids.size).to eq(task_count)
-    task_ids.each { |task_id| expect(task_id).to be_a(Mavrik::Future) }
   end
 
   def random_args

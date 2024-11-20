@@ -7,7 +7,7 @@ use crate::tcp::MavrikTcpClient;
 use crate::without_gvl;
 
 #[derive(Debug)]
-#[magnus::wrap(class = "Mavrik::Client", free_immediately, size)]
+#[magnus::wrap(class = "Mavrik::Connection", free_immediately, size)]
 pub struct RbClient(MavrikTcpClient);
 
 impl RbClient {

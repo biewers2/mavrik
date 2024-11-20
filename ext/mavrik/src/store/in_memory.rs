@@ -6,9 +6,8 @@
 //! task queues and results.
 //!
 
-use crate::messaging::TaskId;
-use crate::store::{ProcessStore, PullStore, PushStore};
-use anyhow::anyhow;
+use crate::messaging::{Task, TaskId};
+use crate::store::{ProcessStore, PullStore, PushStore, QueryStore};
 use log::trace;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -16,16 +15,17 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::ops::DerefMut;
 use std::pin::{pin, Pin};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 use std::time::SystemTime;
 use tokio::sync::Mutex;
+use crate::store::store_state::{StoreState, StoredTask, StoredTaskContext, StoredTaskStatus};
 
 #[derive(Debug, Clone)]
 pub struct TasksInMemory {
     queue_wakers: Arc<Mutex<Vec<Waker>>>,
     queue: Arc<Mutex<Vec<(TaskId, String)>>>,
+    busy: Arc<Mutex<HashMap<TaskId, String>>>,
     completed_wakers: Arc<Mutex<HashMap<TaskId, Waker>>>,
     completed: Arc<Mutex<HashMap<TaskId, String>>>,
 }
@@ -35,6 +35,7 @@ impl TasksInMemory {
         Self {
             queue_wakers: Arc::new(Mutex::new(Vec::new())),
             queue: Arc::new(Mutex::new(Vec::new())),
+            busy: Arc::new(Mutex::new(HashMap::new())),
             completed_wakers: Arc::new(Mutex::new(HashMap::new())),
             completed: Arc::new(Mutex::new(HashMap::new())),
         }
@@ -166,7 +167,7 @@ impl Future for PullTask {
                 }
             }
         };
-        
+
         let wakers = pin!(self.completed_wakers.lock());
         match wakers.poll(cx) {
             Poll::Pending => return Poll::Pending,
@@ -178,7 +179,7 @@ impl Future for PullTask {
                 };
             },
         };
-        
+
         Poll::Pending
     }
 }
@@ -220,5 +221,41 @@ impl Future for NextTask {
         };
 
         Poll::Pending
+    }
+}
+
+impl QueryStore for TasksInMemory {
+    type Error = anyhow::Error;
+
+    async fn state(&self) -> Result<StoreState, Self::Error> {
+        let mut tasks = vec![];
+        for (task_id, task_str) in self.queue.lock().await.iter() {
+            let task: Task = serde_json::from_str(task_str)?;
+            tasks.push(StoredTask {
+                id: task_id.clone(),
+                status: StoredTaskStatus::Enqueued,
+                context: StoredTaskContext::try_from(&task)?
+            });
+        }
+
+        for (task_id, task_str) in self.busy.lock().await.iter() {
+            let task: Task = serde_json::from_str(task_str)?;
+            tasks.push(StoredTask {
+                id: task_id.clone(),
+                status: StoredTaskStatus::Processing,
+                context: StoredTaskContext::try_from(&task)?
+            });
+        }
+
+        for (task_id, task_str) in self.completed.lock().await.iter() {
+            let task: Task = serde_json::from_str(task_str)?;
+            tasks.push(StoredTask {
+                id: task_id.clone(),
+                status: StoredTaskStatus::Completed,
+                context: StoredTaskContext::try_from(&task)?
+            });
+        }
+        
+        Ok(StoreState { tasks })
     }
 }

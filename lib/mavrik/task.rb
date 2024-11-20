@@ -35,22 +35,9 @@ module Mavrik
       # Calls the task executor to run the task.
       # @param args [Array] The positional arguments to pass to the task
       # @param kwargs [Hash] The keyword arguments to pass to the task
-      # @return [Future] The future object that will contain the result of the task
+      # @return [String] The future object that will contain the result of the task
       def call(*args, **kwargs)
-        task = JSON.generate(
-          type: :new_task,
-          queue: :default,
-          ctx: JSON.generate({
-            definition: self.name,
-            args:,
-            kwargs:
-          })
-        )
-
-        task_id_str = Mavrik.client.send_message(task)
-        task_id = JSON.parse(task_id_str)
-
-        Future.new(task_id:)
+        Mavrik.client.new_task(definition: self.name, args:, kwargs:)
       end
     end
 

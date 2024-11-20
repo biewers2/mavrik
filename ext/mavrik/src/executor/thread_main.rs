@@ -4,7 +4,7 @@ use crate::rb::{mavrik_error, module_mavrik};
 use crate::runtime::async_runtime;
 use crate::{with_gvl, without_gvl};
 use anyhow::{anyhow, Context};
-use log::{error, info, trace};
+use log::{error, trace};
 use magnus::value::ReprValue;
 use magnus::{Class, Module, RClass, Ruby};
 use tokio::sync::mpsc;

@@ -1,8 +1,7 @@
 use std::future::Future;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-
-pub struct StoreState;
+use crate::store::store_state::StoreState;
 
 /// A store that can have new entries pushed to it.
 pub trait PushStore {
@@ -67,7 +66,7 @@ pub trait ProcessStore {
 /// 
 /// This is useful for inspecting the state of the store, removing entries that should no longer be processed,
 /// and so on.
-pub trait ManageStore {
+pub trait QueryStore {
     type Error;
     
     /// Get the state of the store.
@@ -76,5 +75,5 @@ pub trait ManageStore {
     ///
     /// The state of the store.
     ///
-    async fn state(&self) -> Result<StoreState, Self::Error>;
+    fn state(&self) -> impl Future<Output = Result<StoreState, Self::Error>> + Send;
 }
