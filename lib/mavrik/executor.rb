@@ -1,7 +1,10 @@
 # frozen_string_literal: true
 
 module Mavrik
+  # Executor module for Mavrik.
+  # Provides a custom thread pool executor for Mavrik, used for speeding up communications with the server.
   module Executor
+    # Get the global thread pool executor.
     def executor
       @executor ||= begin
         min_threads = [2, Concurrent.processor_count].min

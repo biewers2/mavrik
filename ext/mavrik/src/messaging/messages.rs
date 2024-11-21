@@ -9,10 +9,8 @@ use crate::store::StoreState;
 pub enum MavrikRequest {
     /// A new task being submitted.
     NewTask(NewTask),
-
-    /// Wait for a task to finish and return its result.
-    AwaitTask { task_id: TaskId },
     
+    /// Get the state of the storage container.
     GetStoreState
 }
 
@@ -24,8 +22,6 @@ pub enum MavrikResponse {
     /// Contains the created ID of the task submitted.
     NewTaskId(TaskId),
 
-    /// The result of waiting for a task to complete.
-    CompletedTask(TaskResult),
-    
+    /// The state of the storage container.
     StoreState(StoreState),
 }

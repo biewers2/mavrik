@@ -12,6 +12,14 @@ require "mavrik"
 require_relative "helpers/server_helpers"
 
 RSpec.configure do |c|
-  c.before(:suite) { start_server }
-  c.after(:suite) { stop_server }
+  c.before(:each, server: true) do
+    start_server
+  end
+
+  c.after(:each, server: true) do
+    stop_server
+  end
+
+  # c.before(:suite) { start_server }
+  # c.after(:suite) { stop_server }
 end

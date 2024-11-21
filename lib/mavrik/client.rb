@@ -5,7 +5,6 @@ module Mavrik
     include Singleton
 
     # Create a new Mavrik client connected to the server.
-    # @param conn [Connection] The connection to the server.
     def initialize
       @conn = Mavrik.init(Mavrik.config.to_h)
     end
@@ -34,9 +33,5 @@ module Mavrik
       state_str = @conn.send_message(JSON.generate(type: :get_store_state))
       JSON.parse(state_str)
     end
-  end
-
-  def self.client
-    Client.instance
   end
 end

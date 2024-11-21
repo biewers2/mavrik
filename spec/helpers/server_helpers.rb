@@ -4,28 +4,26 @@ require "socket"
 
 def start_server
   $server_pid = wait_for_sigusr1 do
-    Process.fork do
-      Mavrik.main({
-        host: "127.0.0.1",
-        port: 3001,
-        signal_parent_ready: true,
-        thread_count: 1,
-      })
+    Mavrik.configure do |c|
+      c.host = "127.0.0.1"
+      c.port = 3001
+      c.signal_parent_ready = true
+      c.rb_thread_count = 1
     end
-  end
 
-  Mavrik.configure do |c|
-    c.host = "127.0.0.1"
-    c.port = 3001
+    Process.fork do
+      Mavrik.main(Mavrik.config.to_h)
+    end
   end
 end
 
 def stop_server(pid = $server_pid)
   Process.kill("INT", pid) rescue nil
   Process.wait(pid)
+  Mavrik.reset_config!
 end
 
-# Wait for the server to tell us its ready to receive TCP connections.
+# Wait for the server to tell us It's ready to receive TCP connections.
 def wait_for_sigusr1
   t = Thread.new do
     curr_thr = Thread.current
