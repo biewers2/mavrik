@@ -1,7 +1,6 @@
-mod client;
+mod connection;
 mod util;
 mod define;
-mod init;
 mod main;
 
 pub use util::*;

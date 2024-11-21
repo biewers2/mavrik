@@ -4,13 +4,17 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NewTask {
     pub queue: String,
-    pub ctx: String
+    pub definition: String,
+    pub args: String, // Serialized
+    pub kwargs: String // Serialized
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Task {
     pub queue: String,
-    pub ctx: String
+    pub definition: String,
+    pub args: String, // Serialized
+    pub kwargs: String // Serialized
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -28,8 +32,12 @@ pub enum TaskResult {
 
 impl From<NewTask> for Task {
     fn from(value: NewTask) -> Self {
-        let NewTask { queue, ctx } = value;
-        Self { queue, ctx }
+        Self {
+            queue: value.queue,
+            definition: value.definition,
+            args: value.args,
+            kwargs: value.kwargs,
+        }
     }
 }
 

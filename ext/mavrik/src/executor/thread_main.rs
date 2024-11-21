@@ -1,12 +1,12 @@
 use crate::executor::{ThreadId, ThreadMessage};
 use crate::messaging::{Task, TaskId};
-use crate::rb::{mavrik_error, module_mavrik};
+use crate::rb::{mavrik_error, module_mavrik, MRHash};
 use crate::runtime::async_runtime;
 use crate::{with_gvl, without_gvl};
 use anyhow::{anyhow, Context};
 use log::{error, trace};
 use magnus::value::ReprValue;
-use magnus::{Class, Module, RClass, Ruby};
+use magnus::{Class, Module, RClass, RHash, Ruby};
 use tokio::sync::mpsc;
 
 pub fn rb_thread_main(
@@ -40,16 +40,23 @@ async fn thread_loop(
     messages_tx.send(ThreadMessage::ThreadReady(thread_id)).await?;
     
     while let Some((task_id, task)) = task_rx.recv().await {
-        let Task { ctx, .. } = task;
-        trace!(ctx:?; "Task executing");
+        let Task { definition, args, kwargs, .. } = &task;
+        trace!(definition, args, kwargs; "Task executing");
 
         // Any errors raised in the task will be captured in `TaskResult`
-        let args = (ctx.as_str(),);
-        let result = with_gvl!({ execute_task.funcall_public::<_, (&str,), String>("call", args) });
+        let result = with_gvl!({
+            let ctx = MRHash::new();
+            ctx.set_sym("definition", definition.as_str())?;
+            ctx.set_sym("args", args.as_str())?;
+            ctx.set_sym("kwargs", kwargs.as_str())?;
+            
+            execute_task.funcall_public::<_, (RHash,), String>("call", (ctx.0,))
+        });
+
         let task_result = result.map_err(|e| anyhow!("{e}")).context("task execution")?;
         let task_result = serde_json::from_str(&task_result).context("deserializing task result")?;
 
-        trace!(ctx:?; "Task complete");
+        trace!(definition, args, kwargs; "Task complete");
         messages_tx.send(ThreadMessage::TaskComplete((task_id, task_result))).await?;
     }
 

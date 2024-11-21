@@ -19,7 +19,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 use std::time::SystemTime;
 use tokio::sync::Mutex;
-use crate::store::store_state::{StoreState, StoredTask, StoredTaskContext, StoredTaskStatus};
+use crate::store::store_state::{StoreState, StoredTask, StoredTaskStatus};
 
 #[derive(Debug, Clone)]
 pub struct TasksInMemory {
@@ -234,7 +234,9 @@ impl QueryStore for TasksInMemory {
             tasks.push(StoredTask {
                 id: task_id.clone(),
                 status: StoredTaskStatus::Enqueued,
-                context: StoredTaskContext::try_from(&task)?
+                definition: task.definition,
+                args: task.args,
+                kwargs: task.kwargs
             });
         }
 
@@ -243,7 +245,9 @@ impl QueryStore for TasksInMemory {
             tasks.push(StoredTask {
                 id: task_id.clone(),
                 status: StoredTaskStatus::Processing,
-                context: StoredTaskContext::try_from(&task)?
+                definition: task.definition,
+                args: task.args,
+                kwargs: task.kwargs
             });
         }
 
@@ -252,7 +256,9 @@ impl QueryStore for TasksInMemory {
             tasks.push(StoredTask {
                 id: task_id.clone(),
                 status: StoredTaskStatus::Completed,
-                context: StoredTaskContext::try_from(&task)?
+                definition: task.definition,
+                args: task.args,
+                kwargs: task.kwargs
             });
         }
         

@@ -6,7 +6,7 @@ module Mavrik
 
     # Create a new Mavrik client connected to the server.
     def initialize
-      @conn = Mavrik.init(Mavrik.config.to_h)
+      @conn = Mavrik::Connection.new(Mavrik.config.to_h)
     end
 
     # Sends the "new task" request to the server
@@ -15,23 +15,19 @@ module Mavrik
     # @param kwargs [Hash] The keyword arguments to pass to the task
     # @return [String] The task ID
     def new_task(definition:, args:, kwargs:)
-      task = JSON.generate(
+      @conn.request({
         type: :new_task,
         queue: :default,
-        ctx: JSON.generate({
+        ctx: {
           definition:,
-          args:,
-          kwargs:
-        })
-      )
-
-      task_id_str = @conn.send_message(task)
-      JSON.parse(task_id_str)
+          args: JSON.generate(args),
+          kwargs: JSON.generate(kwargs)
+        }
+      })
     end
 
     def store_state
-      state_str = @conn.send_message(JSON.generate(type: :get_store_state))
-      JSON.parse(state_str)
+      @conn.request(type: :get_store_state)
     end
   end
 end
