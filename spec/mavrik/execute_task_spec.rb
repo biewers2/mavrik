@@ -20,7 +20,7 @@ RSpec.describe Mavrik::ExecuteTask do
 
       result = subject.call(ctx)
 
-      expect(JSON.parse(result)).to eq("type" => "success", "result" => 6)
+      expect(result).to eq(type: :success, result: "6")
       expect(TestTask).to have_received(:new).with(no_args)
     end
 
@@ -37,7 +37,7 @@ RSpec.describe Mavrik::ExecuteTask do
 
       result = subject.call(ctx)
 
-      expect(JSON.parse(result)).to eq("type" => "success", "result" => 6)
+      expect(result).to eq(type: :success, result: "6")
       expect(test_task).to have_received(:call).with(1, 2, c: 3)
     end
 
@@ -51,10 +51,10 @@ RSpec.describe Mavrik::ExecuteTask do
 
       result = subject.call(ctx)
 
-      expect(JSON.parse(result)).to include(
-        "type" => "failure",
-        "class" => StandardError.name,
-        "message" => "error message"
+      expect(result).to include(
+        type: :failure,
+        class: StandardError,
+        message: "error message"
       )
     end
   end

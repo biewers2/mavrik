@@ -2,6 +2,7 @@ use magnus::error::RubyUnavailableError;
 use magnus::{ExceptionClass, IntoValue, Module, RHash, RModule, Ruby, Symbol, TryConvert};
 use std::fmt::Debug;
 use std::ops::{Deref, DerefMut};
+use anyhow::anyhow;
 
 #[macro_export]
 macro_rules! without_gvl {
@@ -25,38 +26,31 @@ impl MRHash {
         Self(RHash::new())
     }
     
-    pub fn fetch_sym<T>(&self, key: impl AsRef<str>) -> Result<Option<T>, magnus::Error>
-    where
-        T: TryConvert
-    {
+    pub fn fetch_sym<T: TryConvert>(&self, key: impl AsRef<str>) -> Result<Option<T>, magnus::Error> {
         self.fetch(Symbol::new(key))
     }
     
-    pub fn fetch_sym_or<T>(&self, key: impl AsRef<str>, default: T) -> Result<T, magnus::Error>
-    where
-        T: TryConvert
-    {
+    pub fn fetch_sym_or<T: TryConvert>(&self, key: impl AsRef<str>, default: T) -> Result<T, magnus::Error> {
         self.fetch_or(Symbol::new(key), default)
     }
     
-    pub fn fetch_str<T>(&self, key: impl AsRef<str>) -> Result<Option<T>, magnus::Error>
-    where
-        T: TryConvert
-    {
+    pub fn try_fetch_sym<T: TryConvert>(&self, key: impl AsRef<str>) -> Result<T, magnus::Error> {
+        self.try_fetch(Symbol::new(key))
+    }
+    
+    pub fn fetch_str<T: TryConvert>(&self, key: impl AsRef<str>) -> Result<Option<T>, magnus::Error> {
         self.fetch(key.as_ref())
     }
     
-    pub fn fetch_str_or<T>(&self, key: impl AsRef<str>, default: T) -> Result<T, magnus::Error>
-    where
-        T: TryConvert
-    {
+    pub fn fetch_str_or<T: TryConvert>(&self, key: impl AsRef<str>, default: T) -> Result<T, magnus::Error> {
         self.fetch_or(key.as_ref(), default)
     }
     
-    pub fn fetch<T>(&self, key: impl IntoValue) -> Result<Option<T>, magnus::Error>
-    where
-        T: TryConvert
-    {
+    pub fn try_fetch_str<T: TryConvert>(&self, key: impl AsRef<str>) -> Result<T, magnus::Error> {
+        self.try_fetch(key.as_ref())
+    }
+    
+    pub fn fetch<T: TryConvert>(&self, key: impl IntoValue) -> Result<Option<T>, magnus::Error> {
         let value = self.0
             .get(key)
             .map(|v| T::try_convert(v))
@@ -65,11 +59,14 @@ impl MRHash {
         Ok(value)
     }
     
-    pub fn fetch_or<T>(&self, key: impl IntoValue, default: T) -> Result<T, magnus::Error>
-    where
-        T: TryConvert
-    {
+    pub fn fetch_or<T: TryConvert>(&self, key: impl IntoValue, default: T) -> Result<T, magnus::Error> {
         Ok(self.fetch(key)?.unwrap_or(default))
+    }
+
+
+    pub fn try_fetch<T: TryConvert>(&self, key: impl IntoValue) -> Result<T, magnus::Error> {
+        let key = key.into_value();
+        self.fetch(key)?.ok_or(mavrik_error(anyhow!("{} missing", key)))
     }
     
     pub fn set_sym(&self, key: impl AsRef<str>, value: impl IntoValue) -> Result<(), magnus::Error> {

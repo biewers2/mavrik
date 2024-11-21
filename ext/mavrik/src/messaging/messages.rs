@@ -2,7 +2,7 @@ use crate::messaging::task_id::TaskId;
 use crate::messaging::NewTask;
 use crate::rb::{mavrik_error, MRHash};
 use crate::store::StoreState;
-use anyhow::{anyhow, Context};
+use anyhow::anyhow;
 use magnus::{IntoValue, RArray, RHash};
 use serde::{Deserialize, Serialize};
 
@@ -29,26 +29,20 @@ pub enum MavrikResponse {
     StoreState(StoreState),
 }
 
-macro_rules! fetch_required {
-    ($hash:ident, $key:expr) => {
-        $hash.fetch_sym($key).and_then(|v| v.ok_or(crate::rb::mavrik_error(anyhow!("{} missing", $key))))
-    };
-}
-
 impl TryFrom<RHash> for MavrikRequest {
     type Error = magnus::Error;
 
     fn try_from(h: RHash) -> Result<Self, Self::Error> {
         let h = MRHash(h);
         
-        let variant: String = fetch_required!(h, "type")?;
+        let variant = h.try_fetch_sym::<String>("type")?;
         match variant.as_str() {
             "new_task" => {
                 let new_task = NewTask {
-                    queue: fetch_required!(h, "queue")?,
-                    definition: fetch_required!(h, "definition")?,
-                    args: fetch_required!(h, "args")?,
-                    kwargs: fetch_required!(h, "kwargs")?,
+                    queue: h.try_fetch_sym("queue")?,
+                    definition: h.try_fetch_sym("definition")?,
+                    args: h.try_fetch_sym("args")?,
+                    kwargs: h.try_fetch_sym("kwargs")?,
                 };
                 
                 Ok(MavrikRequest::NewTask(new_task))

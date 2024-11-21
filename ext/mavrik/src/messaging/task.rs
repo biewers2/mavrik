@@ -1,4 +1,6 @@
-use crate::rb::class_mavrik_error;
+use anyhow::anyhow;
+use magnus::RHash;
+use crate::rb::{class_mavrik_error, mavrik_error, MRHash};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -21,7 +23,7 @@ pub struct Task {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum TaskResult {
     Success {
-        result: serde_json::Value
+        result: String // Serialized
     },
     Failure {
         class: String,
@@ -47,6 +49,33 @@ impl From<anyhow::Error> for TaskResult {
             class: class_mavrik_error().to_string(),
             message: format!("{value}"),
             backtrace: vec![]
+        }
+    }
+}
+
+impl TryFrom<RHash> for TaskResult {
+    type Error = magnus::Error;
+
+    fn try_from(h: RHash) -> Result<Self, Self::Error> {
+        let h = MRHash(h);
+        
+        let variant = h.try_fetch_sym::<String>("type")?;
+        match variant.as_str() {
+            "success" => {
+                Ok(Self::Success {
+                    result: h.try_fetch_sym("result")?,
+                })
+            },
+            
+            "failure" => {
+                Ok(Self::Failure {
+                    class: h.try_fetch_sym("class")?,
+                    message: h.try_fetch_sym("message")?,
+                    backtrace: h.try_fetch_sym("backtrace")?,
+                })
+            }
+            
+            _ => Err(mavrik_error(anyhow!("unsupported request type: {}", variant))),
         }
     }
 }

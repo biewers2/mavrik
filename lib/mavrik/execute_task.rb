@@ -7,7 +7,7 @@ module Mavrik
   # Called natively by the Mavrik task executor.
   class ExecuteTask
     # @param ctx [Hash] The task context, containing the task definition, arguments, and keyword arguments.
-    # @return [String] JSON string representing the result of the task execution.
+    # @return [Hash] Resulting hash of the task execution.
     def call(ctx)
       task_def = resolve(ctx, :definition)
       task_args = JSON.parse(resolve(ctx, :args))
@@ -17,17 +17,17 @@ module Mavrik
       task_class = Object.const_get(task_def)
       result = task_class.new.call(*task_args, **task_kwargs)
 
-      JSON.generate({
+      {
         type: :success,
-        result:
-      })
+        result: JSON.generate(result)
+      }
     rescue => e
-      JSON.generate({
+      {
         type: :failure,
         class: e.class,
         message: e.message,
         backtrace: e.backtrace
-      })
+      }
     end
 
     private

@@ -1,9 +1,9 @@
 use crate::executor::{ThreadId, ThreadMessage};
-use crate::messaging::{Task, TaskId};
+use crate::messaging::{Task, TaskId, TaskResult};
 use crate::rb::{mavrik_error, module_mavrik, MRHash};
 use crate::runtime::async_runtime;
 use crate::{with_gvl, without_gvl};
-use anyhow::{anyhow, Context};
+use anyhow::anyhow;
 use log::{error, trace};
 use magnus::value::ReprValue;
 use magnus::{Class, Module, RClass, RHash, Ruby};
@@ -44,17 +44,21 @@ async fn thread_loop(
         trace!(definition, args, kwargs; "Task executing");
 
         // Any errors raised in the task will be captured in `TaskResult`
-        let result = with_gvl!({
+        // We return nested results so we can provide context if things fail.
+        let result: Result<Result<TaskResult, magnus::Error>, magnus::Error> = with_gvl!({
             let ctx = MRHash::new();
             ctx.set_sym("definition", definition.as_str())?;
             ctx.set_sym("args", args.as_str())?;
             ctx.set_sym("kwargs", kwargs.as_str())?;
-            
-            execute_task.funcall_public::<_, (RHash,), String>("call", (ctx.0,))
-        });
 
-        let task_result = result.map_err(|e| anyhow!("{e}")).context("task execution")?;
-        let task_result = serde_json::from_str(&task_result).context("deserializing task result")?;
+            execute_task
+                .funcall_public::<_, (RHash,), RHash>("call", (ctx.0,))
+                .map(|h| h.try_into())
+        });
+        
+        let task_result = result
+            .map_err(|e| anyhow!("task execution failed: {e}"))?
+            .map_err(|e| anyhow!("converting returned hash to task result failed: {e}"))?;
 
         trace!(definition, args, kwargs; "Task complete");
         messages_tx.send(ThreadMessage::TaskComplete((task_id, task_result))).await?;
