@@ -2,7 +2,7 @@
 
 module Mavrik
   class Client
-    include Singleton
+#     include ::Singleton
 
     # Create a new Mavrik client connected to the server.
     def initialize

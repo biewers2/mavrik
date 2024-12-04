@@ -5,3 +5,9 @@
 [workspace]
 resolver = "2"
 members = ["ext/mavrik"]
+
+[profile.dev]
+opt-level = 0
+
+[profile.release]
+opt-level = 3

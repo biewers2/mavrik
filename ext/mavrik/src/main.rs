@@ -1,7 +1,7 @@
 use log::info;
 use magnus::RHash;
 use mavrik::mavrik::{Mavrik, MavrikOptions};
-use mavrik::rb::mavrik_error;
+use mavrik::rb::util::mavrik_error;
 use mavrik::runtime::async_runtime;
 use mavrik::without_gvl;
 

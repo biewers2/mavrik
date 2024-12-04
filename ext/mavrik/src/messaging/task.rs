@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use magnus::RHash;
-use crate::rb::{class_mavrik_error, mavrik_error, MRHash};
+use crate::rb::util::{class_mavrik_error, mavrik_error, MRHash};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]

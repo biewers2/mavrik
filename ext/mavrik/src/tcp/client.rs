@@ -2,8 +2,7 @@ use std::ops::DerefMut;
 use anyhow::Context;
 use tokio::net::TcpStream;
 use tokio::sync::Mutex;
-use crate::messaging::{MavrikRequest, MavrikResponse};
-use crate::tcp::{read_deserialized, write_serialized};
+use crate::{io::{read_object, write_object}, messaging::{MavrikRequest, MavrikResponse}};
 
 /// Options for creating a TCP client.
 pub struct TcpClientOptions {
@@ -48,7 +47,7 @@ impl MavrikTcpClient {
     ///
     pub async fn send(&self, request: &MavrikRequest) -> Result<(), anyhow::Error> {
         let mut stream = self.stream.lock().await;
-        write_serialized(stream.deref_mut(), &request).await.context("sending Mavrik request over TCP")?;
+        write_object(stream.deref_mut(), &request).await.context("sending Mavrik request over TCP")?;
         Ok(())
     }
 
@@ -60,7 +59,7 @@ impl MavrikTcpClient {
     /// 
     pub async fn recv(&self) -> Result<MavrikResponse, anyhow::Error> {
         let mut stream = self.stream.lock().await;
-        let response = read_deserialized(stream.deref_mut()).await.context("receiving Mavrik response over TCP")?;
+        let response = read_object(stream.deref_mut()).await.context("receiving Mavrik response over TCP")?;
         Ok(response)
     }
 }

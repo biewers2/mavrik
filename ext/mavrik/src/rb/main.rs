@@ -1,5 +1,5 @@
 use crate::mavrik::{Mavrik, MavrikOptions};
-use crate::rb::{mavrik_error, module_mavrik};
+use crate::rb::util::{mavrik_error, module_mavrik};
 use crate::runtime::async_runtime;
 use crate::without_gvl;
 use log::info;

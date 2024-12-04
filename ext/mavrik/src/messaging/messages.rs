@@ -1,6 +1,6 @@
 use crate::messaging::task_id::TaskId;
 use crate::messaging::NewTask;
-use crate::rb::{mavrik_error, MRHash};
+use crate::rb::util::{mavrik_error, MRHash};
 use crate::store::StoreState;
 use anyhow::anyhow;
 use magnus::{IntoValue, RArray, RHash};

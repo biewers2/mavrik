@@ -1,7 +1,7 @@
 use crate::executor::thread_main::rb_thread_main;
 use crate::mavrik::MavrikOptions;
 use crate::messaging::{Task, TaskId, TaskResult};
-use crate::rb::in_ruby;
+use crate::rb::util::in_ruby;
 use crate::service::MavrikService;
 use crate::store::ProcessStore;
 use log::{debug, error};

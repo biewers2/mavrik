@@ -1,0 +1,7 @@
+#/bin/sh
+
+(
+    cd "${HOME}/Repos/mavrik"
+    "${HOME}/.asdf/shims/bundle" exec rspec
+)
+

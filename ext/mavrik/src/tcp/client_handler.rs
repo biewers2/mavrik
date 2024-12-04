@@ -1,7 +1,7 @@
+use crate::io::{read_object, write_object};
 use crate::messaging::{MavrikRequest, MavrikResponse, Task, TaskId};
 use crate::service::MavrikService;
 use crate::store::{PullStore, PushStore, QueryStore};
-use crate::tcp::util::{read_deserialized, write_serialized};
 use anyhow::Context;
 use log::trace;
 use tokio::net::TcpStream;
@@ -34,7 +34,7 @@ where
     type TaskOutput = Result<MavrikRequest, anyhow::Error>;
 
     async fn poll_task(&mut self) -> Self::TaskOutput {
-        read_deserialized(&mut self.stream)
+        read_object(&mut self.stream)
             .await
             .context("receiving Mavrik request over TCP failed")
     }
@@ -47,7 +47,7 @@ where
                 let response = MavrikResponse::NewTaskId(task_id);
 
                 trace!(response:?; "Sending response over TCP");
-                write_serialized(&mut self.stream, &response)
+                write_object(&mut self.stream, &response)
                     .await
                     .context("sending new task ID over TCP failed")?;
             },
@@ -55,7 +55,7 @@ where
             MavrikRequest::GetStoreState => {
                 let state = self.store.state().await?;
                 let response = MavrikResponse::StoreState(state);
-                write_serialized(&mut self.stream, &response)
+                write_object(&mut self.stream, &response)
                     .await
                     .context("sending state over TCP failed")?;
             }
@@ -63,3 +63,4 @@ where
         Ok(())
     }
 }
+
