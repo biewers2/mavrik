@@ -148,7 +148,7 @@ pub mod tests {
     use magnus::value::{Qnil, ReprValue};
     use magnus::{eval, Ruby, Symbol, TryConvert};
 
-    pub fn test_mrhash_fetch_sym(_r: &Ruby) -> Result<(), magnus::Error> {
+    pub fn mrhash_fetch_sym(_r: &Ruby) -> Result<(), magnus::Error> {
         let hash = MRHash::new();
         hash.aset(Symbol::new("foo"), 42)?;
 
@@ -161,7 +161,7 @@ pub mod tests {
         Ok(())
     }
     
-    pub fn test_mrhash_fetch_sym_or(_r: &Ruby) -> Result<(), magnus::Error> {
+    pub fn mrhash_fetch_sym_or(_r: &Ruby) -> Result<(), magnus::Error> {
         let hash = MRHash::new();
         hash.aset(Symbol::new("foo"), 42)?;
 
@@ -174,7 +174,7 @@ pub mod tests {
         Ok(())
     }
     
-    pub fn test_mrhash_try_fetch_sym(_r: &Ruby) -> Result<(), magnus::Error> {
+    pub fn mrhash_try_fetch_sym(_r: &Ruby) -> Result<(), magnus::Error> {
         let hash = MRHash::new();
         hash.aset(Symbol::new("foo"), 42)?;
 
@@ -187,7 +187,7 @@ pub mod tests {
         Ok(())
     }
     
-    pub fn test_mrhash_fetch_str(_r: &Ruby) -> Result<(), magnus::Error> {
+    pub fn mrhash_fetch_str(_r: &Ruby) -> Result<(), magnus::Error> {
         let hash = MRHash::new();
         hash.aset("foo", 42)?;
 
@@ -200,7 +200,7 @@ pub mod tests {
         Ok(())
     }
     
-    pub fn test_mrhash_fetch_str_or(_r: &Ruby) -> Result<(), magnus::Error> {
+    pub fn mrhash_fetch_str_or(_r: &Ruby) -> Result<(), magnus::Error> {
         let hash = MRHash::new();
         hash.aset("foo", 42)?;
 
@@ -213,7 +213,7 @@ pub mod tests {
         Ok(())
     }
     
-    pub fn test_mrhash_try_fetch_str(_r: &Ruby) -> Result<(), magnus::Error> {
+    pub fn mrhash_try_fetch_str(_r: &Ruby) -> Result<(), magnus::Error> {
         let hash = MRHash::new();
         hash.aset("foo", 42)?;
 
@@ -226,7 +226,7 @@ pub mod tests {
         Ok(())
     }
     
-    pub fn test_mrhash_fetch(_r: &Ruby) -> Result<(), magnus::Error> {
+    pub fn mrhash_fetch(_r: &Ruby) -> Result<(), magnus::Error> {
         let hash = MRHash::new();
         hash.aset(Symbol::new("foo"), 42)?;
         hash.aset(eval::<Qnil>("nil")?, true)?;
@@ -243,7 +243,7 @@ pub mod tests {
         Ok(())
     }
     
-    pub fn test_mrhash_fetch_or(_r: &Ruby) -> Result<(), magnus::Error> {
+    pub fn mrhash_fetch_or(_r: &Ruby) -> Result<(), magnus::Error> {
         let hash = MRHash::new();
         hash.aset(Symbol::new("foo"), 42)?;
         hash.aset(eval::<Qnil>("nil")?, true)?;
@@ -260,7 +260,7 @@ pub mod tests {
         Ok(())
     }
     
-    pub fn test_mrhash_try_fetch(_r: &Ruby) -> Result<(), magnus::Error> {
+    pub fn mrhash_try_fetch(_r: &Ruby) -> Result<(), magnus::Error> {
         let hash = MRHash::new();
         hash.aset(Symbol::new("foo"), 42)?;
         hash.aset(eval::<Qnil>("nil")?, true)?;
@@ -277,7 +277,7 @@ pub mod tests {
         Ok(())
     }
     
-    pub fn test_mrhash_set_sym(_r: &Ruby) -> Result<(), magnus::Error> {
+    pub fn mrhash_set_sym(_r: &Ruby) -> Result<(), magnus::Error> {
         let hash = MRHash::new();
         hash.set_sym("foo", 42)?;
         hash.set_sym("bar", "baz")?;
@@ -297,7 +297,7 @@ pub mod tests {
         Ok(())
     }
     
-    pub fn test_mrhash_set_str(_r: &Ruby) -> Result<(), magnus::Error> {
+    pub fn mrhash_set_str(_r: &Ruby) -> Result<(), magnus::Error> {
         let hash = MRHash::new();
         hash.set_str("foo", 42)?;
         hash.set_str("bar", "baz")?;
@@ -317,7 +317,7 @@ pub mod tests {
         Ok(())
     }
     
-    pub fn test_mrhash_set(_r: &Ruby) -> Result<(), magnus::Error> {
+    pub fn mrhash_set(_r: &Ruby) -> Result<(), magnus::Error> {
         let hash = MRHash::new();
         hash.set(Symbol::new("foo"), 42)?;
         hash.set(eval::<Qnil>("nil")?, true)?;
@@ -349,7 +349,7 @@ pub mod tests {
         Ok(())
     }
 
-    pub fn test_mavrik_error_with_custom_message(_r: &Ruby) -> Result<(), magnus::Error> {
+    pub fn mavrik_error_uses_custom_message(_r: &Ruby) -> Result<(), magnus::Error> {
         let error = mavrik_error(anyhow!("this is an error"));
 
         match error.error_type() {
@@ -363,7 +363,7 @@ pub mod tests {
         }
     }
 
-    pub fn test_in_ruby_calls_fn_in_gvl(_r: &Ruby) -> Result<(), magnus::Error> {
+    pub fn in_ruby_calls_fn_in_gvl(_r: &Ruby) -> Result<(), magnus::Error> {
         let mut called = false;
         let called_ref = &mut called;
 
@@ -375,7 +375,7 @@ pub mod tests {
         Ok(())
     }
 
-    pub fn test_in_ruby_locks_gvl_then_calls_fn(_r: &Ruby) -> Result<(), magnus::Error> {
+    pub fn in_ruby_locks_gvl_then_calls_fn(_r: &Ruby) -> Result<(), magnus::Error> {
         let mut called = false;
         let called_ref = &mut called;
 

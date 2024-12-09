@@ -35,26 +35,26 @@ mod tests {
             configure_mavrik(ruby)?;
             
             // crate::rb::connection
-            connection::tests::test_connection_new_connects_to_server(&ruby)?;
-            connection::tests::test_connection_new_fails_to_connect_to_server(&ruby)?;
-            // connection::tests::test_connection_requests_data_from_server(&ruby).unwrap();
-            
+            connection::tests::new_connection_connects_to_server(&ruby)?;
+            connection::tests::new_connection_fails_to_connect_to_server(&ruby)?;
+            connection::tests::new_connection_requests_data_from_server(&ruby)?;
+
             // crate::rb::util
-            util::tests::test_mrhash_fetch_sym(&ruby)?;
-            util::tests::test_mrhash_fetch_sym_or(&ruby)?;
-            util::tests::test_mrhash_try_fetch_sym(&ruby)?;
-            util::tests::test_mrhash_fetch_str(&ruby)?;
-            util::tests::test_mrhash_fetch_str_or(&ruby)?;
-            util::tests::test_mrhash_try_fetch_str(&ruby)?;
-            util::tests::test_mrhash_fetch(&ruby)?;
-            util::tests::test_mrhash_fetch_or(&ruby)?;
-            util::tests::test_mrhash_try_fetch(&ruby)?;
-            util::tests::test_mrhash_set_sym(&ruby)?;
-            util::tests::test_mrhash_set_str(&ruby)?;
-            util::tests::test_mrhash_set(&ruby)?;
-            util::tests::test_mavrik_error_with_custom_message(&ruby)?;
-            util::tests::test_in_ruby_calls_fn_in_gvl(&ruby)?;
-            util::tests::test_in_ruby_locks_gvl_then_calls_fn(&ruby)?;
+            util::tests::mrhash_fetch_sym(&ruby)?;
+            util::tests::mrhash_fetch_sym_or(&ruby)?;
+            util::tests::mrhash_try_fetch_sym(&ruby)?;
+            util::tests::mrhash_fetch_str(&ruby)?;
+            util::tests::mrhash_fetch_str_or(&ruby)?;
+            util::tests::mrhash_try_fetch_str(&ruby)?;
+            util::tests::mrhash_fetch(&ruby)?;
+            util::tests::mrhash_fetch_or(&ruby)?;
+            util::tests::mrhash_try_fetch(&ruby)?;
+            util::tests::mrhash_set_sym(&ruby)?;
+            util::tests::mrhash_set_str(&ruby)?;
+            util::tests::mrhash_set(&ruby)?;
+            util::tests::mavrik_error_uses_custom_message(&ruby)?;
+            util::tests::in_ruby_calls_fn_in_gvl(&ruby)?;
+            util::tests::in_ruby_locks_gvl_then_calls_fn(&ruby)?;
             
             Ok(())
         })

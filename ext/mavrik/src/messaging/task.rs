@@ -3,7 +3,7 @@ use magnus::RHash;
 use crate::rb::util::{class_mavrik_error, mavrik_error, MRHash};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct NewTask {
     pub queue: String,
     pub definition: String,
@@ -11,7 +11,7 @@ pub struct NewTask {
     pub kwargs: String // Serialized
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Task {
     pub queue: String,
     pub definition: String,
