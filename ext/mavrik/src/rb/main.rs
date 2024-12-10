@@ -24,3 +24,17 @@ fn main(options: RHash) -> Result<(), magnus::Error> {
     info!("Mavrik server stopped");
     Ok(())
 }
+
+#[cfg(test)]
+pub mod tests {
+    use magnus::{value::ReprValue, Ruby};
+    use crate::rb::util::module_mavrik;
+
+    use super::define_main;
+
+    pub fn main_defines_ruby_class_and_methods(r: &Ruby) -> Result<(), magnus::Error> {
+        define_main(r)?;
+        assert!(module_mavrik().respond_to("main", false)?);
+        Ok(())
+    }
+}

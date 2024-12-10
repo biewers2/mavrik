@@ -337,13 +337,13 @@ pub mod tests {
         Ok(())
     }
     
-    pub fn test_mavrik_module_is_defined(_r: &Ruby) -> Result<(), magnus::Error> {
+    pub fn mavrik_module_is_defined(_r: &Ruby) -> Result<(), magnus::Error> {
         let module = module_mavrik();
         assert!(!module.is_nil());
         Ok(())
     }
     
-    pub fn test_mavrik_error_class_is_defined(_r: &Ruby) -> Result<(), magnus::Error> {
+    pub fn mavrik_error_class_is_defined(_r: &Ruby) -> Result<(), magnus::Error> {
         let error = class_mavrik_error();
         assert!(!error.is_nil());
         Ok(())

@@ -21,8 +21,7 @@ fn init(ruby: &magnus::Ruby) -> Result<(), magnus::Error> {
 #[cfg(test)]
 mod tests {
     use magnus::Ruby;
-    use crate::rb::connection;
-    use crate::rb::util;
+    use crate::rb::{connection, main, util};
 
     /// Tests that need to be run in a Ruby context can be run here.
     /// 
@@ -33,11 +32,15 @@ mod tests {
     fn test_in_ruby() -> Result<(), String> {
         Ruby::init(|ruby| {
             configure_mavrik(ruby)?;
-            
+
             // crate::rb::connection
+            connection::tests::define_connection_defines_ruby_class_and_methods(&ruby)?;
             connection::tests::new_connection_connects_to_server(&ruby)?;
             connection::tests::new_connection_fails_to_connect_to_server(&ruby)?;
             connection::tests::new_connection_requests_data_from_server(&ruby)?;
+
+            // crate::rb::main
+            main::tests::main_defines_ruby_class_and_methods(&ruby)?;
 
             // crate::rb::util
             util::tests::mrhash_fetch_sym(&ruby)?;
@@ -52,6 +55,8 @@ mod tests {
             util::tests::mrhash_set_sym(&ruby)?;
             util::tests::mrhash_set_str(&ruby)?;
             util::tests::mrhash_set(&ruby)?;
+            util::tests::mavrik_module_is_defined(&ruby)?;
+            util::tests::mavrik_error_class_is_defined(&ruby)?;
             util::tests::mavrik_error_uses_custom_message(&ruby)?;
             util::tests::in_ruby_calls_fn_in_gvl(&ruby)?;
             util::tests::in_ruby_locks_gvl_then_calls_fn(&ruby)?;

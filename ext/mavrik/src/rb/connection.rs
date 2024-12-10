@@ -7,6 +7,13 @@ use anyhow::Context;
 use log::debug;
 use magnus::{function, method, Module, Object, RHash, Ruby};
 
+pub fn define_connection(ruby: &Ruby) -> Result<(), magnus::Error> {
+    let conn = module_mavrik().define_class("Connection", ruby.class_object())?;
+    conn.define_singleton_method("new", function!(RbConnection::new, 1))?;
+    conn.define_method("request", method!(RbConnection::request, 1))?;
+    Ok(())
+}
+
 #[derive(Debug)]
 #[magnus::wrap(class = "Mavrik::Connection", free_immediately, size)]
 pub struct RbConnection {
@@ -45,19 +52,12 @@ impl RbConnection {
     }
 }
 
-pub fn define_client(ruby: &Ruby) -> Result<(), magnus::Error> {
-    let client = module_mavrik().define_class("Connection", ruby.class_object())?;
-    client.define_singleton_method("new", function!(RbConnection::new, 1))?;
-    client.define_method("request", method!(RbConnection::request, 1))?;
-    Ok(())
-}
-
 #[cfg(test)]
 pub mod tests {
     use std::future::Future;
-    use crate::rb::connection::RbConnection;
-    use crate::rb::util::{mavrik_error, MRHash};
-    use magnus::{RHash, Ruby};
+    use crate::rb::connection::{define_connection, RbConnection};
+    use crate::rb::util::{mavrik_error, module_mavrik, MRHash};
+    use magnus::{Class, Module, RClass, RHash, Ruby};
     use std::net::SocketAddr;
     use tokio::net::{TcpListener, TcpStream};
     use std::thread;
@@ -67,6 +67,19 @@ pub mod tests {
     use crate::messaging::{MavrikRequest, MavrikResponse};
     use crate::runtime::async_runtime;
     use crate::store::StoreState;
+
+    pub fn define_connection_defines_ruby_class_and_methods(r: &Ruby) -> Result<(), magnus::Error> {
+        define_connection(r)?;
+
+        let class_conn: RClass = module_mavrik().const_get("Connection")?;
+        assert_eq!(unsafe { class_conn.name() }, "Mavrik::Connection");
+        assert!(class_conn.respond_to("new", false)?);
+
+        let conn = class_conn.new_instance(())?;
+        assert!(conn.respond_to("request", false)?);
+
+        Ok(())
+    }
 
     pub fn new_connection_connects_to_server(_r: &Ruby) -> Result<(), magnus::Error> {
         let host = "127.0.0.1";
@@ -93,9 +106,7 @@ pub mod tests {
         let result = RbConnection::new(config.into());
         
         assert!(result.is_err());
-        let error_message = result.unwrap_err().to_string();
-        println!("{}", error_message);
-        assert!(error_message.contains("Connection refused"));
+        assert!(result.unwrap_err().to_string().contains("Connection refused"));
         Ok(())
     }
     

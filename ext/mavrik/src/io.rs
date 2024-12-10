@@ -70,17 +70,24 @@ mod tests {
         };
 
         let mut buffer = Cursor::new(Vec::new());
-        
-        // Write object to buffer
         write_object(&mut buffer, &test_obj).await.unwrap();
-        
-        // Reset cursor to start
         buffer.set_position(0);
-        
-        // Read object back
         let read_obj: TestObject = read_object(&mut buffer).await.unwrap();
         
         assert_eq!(test_obj, read_obj);
     }
+
+    #[tokio::test]
+    async fn test_roundtrip_empty_object() {
+        let obj = None;
+
+        let mut buffer = Cursor::new(Vec::new());
+        write_object(&mut buffer, &obj).await.unwrap();
+        buffer.set_position(0);
+        let read_obj: Option<TestObject> = read_object(&mut buffer).await.unwrap();
+
+        assert_eq!(obj, read_obj);
+    }
 }
+
 
