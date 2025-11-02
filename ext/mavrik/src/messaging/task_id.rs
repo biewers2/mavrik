@@ -74,7 +74,7 @@ impl Display for TaskId {
 }
 
 impl ToValue for TaskId {
-    fn to_value(&self) -> Value {
+    fn to_value(&'_ self) -> Value<'_> {
         Value::from_display(self)
     }
 }

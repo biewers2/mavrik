@@ -65,7 +65,7 @@ impl From<MavrikResponse> for magnus::Value {
     fn from(response: MavrikResponse) -> Self {
         match response {
             MavrikResponse::NewTaskId(task_id) => {
-                format!("{task_id}").into_value()
+                format!("{task_id}").into_value_with()
             },
             
             MavrikResponse::StoreState(state) => {

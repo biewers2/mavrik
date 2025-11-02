@@ -1,6 +1,6 @@
 use crate::mavrik::MavrikOptions;
 use crate::messaging::TaskId;
-use crate::service::{start_service, MavrikService, ServiceChannel};
+use crate::service::{ServiceTask, ServiceChannel, Services};
 use crate::store::{PullStore, PushStore, QueryStore};
 use crate::tcp::TcpClientHandler;
 use anyhow::Context;
@@ -16,7 +16,7 @@ pub struct MavrikTcpListener<Store> {
     inner: TcpListener,
     store: Store,
     handlers: JoinSet<Result<(), anyhow::Error>>,
-    handler_chans: Vec<ServiceChannel>
+    handler_chans: Vec<ServiceChannel>,
 }
 
 impl<Store> MavrikTcpListener<Store> {
@@ -35,7 +35,7 @@ impl<Store> MavrikTcpListener<Store> {
         let host = options.get("host", "127.0.0.1".to_string())?;
         let port = options.get("port", 3001)?;
         let signal_parent_ready = options.get("signal_parent_ready", false)?;
-        
+
         let inner = TcpListener::bind(format!("{host}:{port}")).await?;
         let handlers = JoinSet::new();
         let handler_chans = Vec::new();
@@ -45,38 +45,51 @@ impl<Store> MavrikTcpListener<Store> {
         if signal_parent_ready {
             match unsafe { kill(getppid(), SIGUSR1) } {
                 0 => info!("Successfully signalled ready to parent process"),
-                _ => warn!("Failed to send ready signal to parent process")
+                _ => warn!("Failed to send ready signal to parent process"),
             }
         }
 
-        Ok(Self { inner, store, handlers, handler_chans })
+        Ok(Self {
+            inner,
+            store,
+            handlers,
+            handler_chans,
+        })
     }
 }
 
-impl<Store> MavrikService for MavrikTcpListener<Store>
+impl<Store> ServiceTask for MavrikTcpListener<Store>
 where
     Store: PushStore<Id = TaskId, Error = anyhow::Error>
         + PullStore<Id = TaskId, Error = anyhow::Error>
         + QueryStore<Error = anyhow::Error>
-        + Clone + Send + Sync + 'static,
+        + Clone
+        + Send
+        + Sync
+        + 'static,
 {
     type TaskOutput = Result<(TcpStream, SocketAddr), anyhow::Error>;
 
     // Accept TCP connections from client
     async fn poll_task(&mut self) -> Self::TaskOutput {
-        self.inner.accept().await.context("failed to accept TCP connections")
+        self.inner
+            .accept()
+            .await
+            .context("failed to accept TCP connections")
     }
 
     // Handle TCP connections from client by spawning a new service task.
     async fn on_task_ready(&mut self, conn: Self::TaskOutput) -> Result<(), anyhow::Error> {
         let (stream, addr) = conn?;
         info!(addr:?; "Accepted connection");
-        
-        let handler = TcpClientHandler::new(stream, self.store.clone());
-        let (handler, chan) = start_service("TCP-handler", handler);
-        
-        self.handlers.spawn(handler);
-        self.handler_chans.push(chan);
+
+        let service = Services::start(
+            "TCP-handler",
+            TcpClientHandler::new(stream, self.store.clone()),
+        );
+
+        self.handlers.spawn(service.task);
+        self.handler_chans.push(service.channel);
         Ok(())
     }
 

@@ -1,6 +1,6 @@
 use crate::io::{read_object, write_object};
 use crate::messaging::{MavrikRequest, MavrikResponse, Task, TaskId};
-use crate::service::MavrikService;
+use crate::service::ServiceTask;
 use crate::store::{PullStore, PushStore, QueryStore};
 use anyhow::Context;
 use log::trace;
@@ -24,7 +24,7 @@ where
     }
 }
 
-impl<Store> MavrikService for TcpClientHandler<Store>
+impl<Store> ServiceTask for TcpClientHandler<Store>
 where
     Store: PushStore<Id = TaskId, Error = anyhow::Error>
         + PullStore<Id = TaskId, Error = anyhow::Error>

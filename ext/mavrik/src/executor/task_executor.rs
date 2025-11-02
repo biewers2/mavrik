@@ -2,7 +2,7 @@ use crate::executor::thread_main::rb_thread_main;
 use crate::mavrik::MavrikOptions;
 use crate::messaging::{Task, TaskId, TaskResult};
 use crate::rb::util::in_ruby;
-use crate::service::MavrikService;
+use crate::service::ServiceTask;
 use crate::store::ProcessStore;
 use log::{debug, error};
 use magnus::value::ReprValue;
@@ -79,7 +79,7 @@ impl<Store> TaskExecutor<Store> {
     }
 }
 
-impl<Store> MavrikService for TaskExecutor<Store>
+impl<Store> ServiceTask for TaskExecutor<Store>
 where
     Store: ProcessStore<Id = TaskId, Error = anyhow::Error>
 {

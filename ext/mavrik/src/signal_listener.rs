@@ -1,4 +1,4 @@
-use crate::service::MavrikService;
+use crate::service::ServiceTask;
 use futures::StreamExt;
 use libc::{c_int, SIGINT};
 use signal_hook_tokio::Signals;
@@ -17,7 +17,7 @@ impl SignalListener {
     }
 }
 
-impl MavrikService for SignalListener {
+impl ServiceTask for SignalListener {
     type TaskOutput = Option<c_int>;
 
     async fn poll_task(&mut self) -> Self::TaskOutput {
