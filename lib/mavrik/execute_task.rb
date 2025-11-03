@@ -35,7 +35,7 @@ module Mavrik
     def resolve(ctx, key)
       value = ctx[key]
       raise Mavrik::Error, "Missing task #{key}" if value.nil?
-      raise Mavrik::Error, "Task #{key} must be a #{type}" unless value.is_a?(String)
+      raise Mavrik::Error, "Task #{key} must be of type string" unless value.is_a?(String)
       value
     end
   end
