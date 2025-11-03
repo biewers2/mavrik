@@ -1,8 +1,6 @@
-use anyhow::anyhow;
 use magnus::error::RubyUnavailableError;
-use magnus::{ExceptionClass, IntoValue, Module, RHash, RModule, Ruby, Symbol, TryConvert};
+use magnus::{ExceptionClass, Module, RModule, Ruby};
 use std::fmt::Debug;
-use std::ops::{Deref, DerefMut};
 
 #[macro_export]
 macro_rules! without_gvl {
@@ -18,88 +16,11 @@ macro_rules! with_gvl {
     };
 }
 
-#[derive(Debug)]
-pub struct MRHash(pub RHash);
-
-impl MRHash {
-    pub fn new() -> Self {
-        Self(RHash::new())
-    }
-    
-    pub fn fetch_sym<T: TryConvert>(&self, key: impl AsRef<str>) -> Result<Option<T>, magnus::Error> {
-        self.fetch(Symbol::new(key))
-    }
-    
-    pub fn fetch_sym_or<T: TryConvert>(&self, key: impl AsRef<str>, default: T) -> Result<T, magnus::Error> {
-        self.fetch_or(Symbol::new(key), default)
-    }
-    
-    pub fn try_fetch_sym<T: TryConvert>(&self, key: impl AsRef<str>) -> Result<T, magnus::Error> {
-        self.try_fetch(Symbol::new(key))
-    }
-    
-    pub fn fetch_str<T: TryConvert>(&self, key: impl AsRef<str>) -> Result<Option<T>, magnus::Error> {
-        self.fetch(key.as_ref())
-    }
-    
-    pub fn fetch_str_or<T: TryConvert>(&self, key: impl AsRef<str>, default: T) -> Result<T, magnus::Error> {
-        self.fetch_or(key.as_ref(), default)
-    }
-    
-    pub fn try_fetch_str<T: TryConvert>(&self, key: impl AsRef<str>) -> Result<T, magnus::Error> {
-        self.try_fetch(key.as_ref())
-    }
-    
-    pub fn fetch<T: TryConvert>(&self, key: impl IntoValue) -> Result<Option<T>, magnus::Error> {
-        let value = self.0
-            .get(key)
-            .map(|v| T::try_convert(v))
-            .transpose()?;
-
-        Ok(value)
-    }
-    
-    pub fn fetch_or<T: TryConvert>(&self, key: impl IntoValue, default: T) -> Result<T, magnus::Error> {
-        Ok(self.fetch(key)?.unwrap_or(default))
-    }
-
-
-    pub fn try_fetch<T: TryConvert>(&self, key: impl IntoValue) -> Result<T, magnus::Error> {
-        let key = key.into_value();
-        self.fetch(key)?.ok_or(mavrik_error(anyhow!("{} missing", key)))
-    }
-    
-    pub fn set_sym(&self, key: impl AsRef<str>, value: impl IntoValue) -> Result<(), magnus::Error> {
-        self.set(Symbol::new(key), value)
-    }
-    
-    pub fn set_str(&self, key: impl AsRef<str>, value: impl IntoValue) -> Result<(), magnus::Error> {
-        self.set(key.as_ref(), value)
-    }
-    
-    pub fn set(&self, key: impl IntoValue, value: impl IntoValue) -> Result<(), magnus::Error> {
-        self.0.aset(key, value)
-    }
-}
-
-impl Deref for MRHash {
-    type Target = RHash;
-    
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for MRHash {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl From<MRHash> for RHash {
-    fn from(hash: MRHash) -> Self {
-        hash.0
-    }
+#[macro_export]
+macro_rules! ruby_or_mavrik_error {
+    () => {
+        magnus::Ruby::get().map_err(crate::rb::util::mavrik_error)
+    };
 }
 
 pub fn module_mavrik() -> RModule {
@@ -142,201 +63,12 @@ pub fn in_ruby<T>(mut func: impl FnMut(Ruby) -> T) -> T {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::rb::util::{class_mavrik_error, in_ruby, mavrik_error, module_mavrik, MRHash};
+    use crate::rb::util::{class_mavrik_error, in_ruby, mavrik_error, module_mavrik};
     use anyhow::anyhow;
     use magnus::error::ErrorType;
-    use magnus::value::{Qnil, ReprValue};
-    use magnus::{eval, Ruby, Symbol, TryConvert};
+    use magnus::value::ReprValue;
+    use magnus::Ruby;
 
-    pub fn mrhash_fetch_sym(_r: &Ruby) -> Result<(), magnus::Error> {
-        let hash = MRHash::new();
-        hash.aset(Symbol::new("foo"), 42)?;
-
-        let value: Option<i64> = hash.fetch_sym("foo")?;
-        assert_eq!(value, Some(42));
-
-        let value: Option<i64> = hash.fetch_sym("bar")?;
-        assert_eq!(value, None);
-
-        Ok(())
-    }
-    
-    pub fn mrhash_fetch_sym_or(_r: &Ruby) -> Result<(), magnus::Error> {
-        let hash = MRHash::new();
-        hash.aset(Symbol::new("foo"), 42)?;
-
-        let value: i64 = hash.fetch_sym_or("foo", 0)?;
-        assert_eq!(value, 42);
-
-        let value: i64 = hash.fetch_sym_or("bar", 0)?;
-        assert_eq!(value, 0);
-
-        Ok(())
-    }
-    
-    pub fn mrhash_try_fetch_sym(_r: &Ruby) -> Result<(), magnus::Error> {
-        let hash = MRHash::new();
-        hash.aset(Symbol::new("foo"), 42)?;
-
-        let value: i64 = hash.try_fetch_sym("foo")?;
-        assert_eq!(value, 42);
-
-        let value: Result<i64, magnus::Error> = hash.try_fetch_sym("bar");
-        assert!(value.is_err());
-
-        Ok(())
-    }
-    
-    pub fn mrhash_fetch_str(_r: &Ruby) -> Result<(), magnus::Error> {
-        let hash = MRHash::new();
-        hash.aset("foo", 42)?;
-
-        let value: Option<i64> = hash.fetch_str("foo")?;
-        assert_eq!(value, Some(42));
-
-        let value: Option<i64> = hash.fetch_str("bar")?;
-        assert_eq!(value, None);
-
-        Ok(())
-    }
-    
-    pub fn mrhash_fetch_str_or(_r: &Ruby) -> Result<(), magnus::Error> {
-        let hash = MRHash::new();
-        hash.aset("foo", 42)?;
-
-        let value: i64 = hash.fetch_str_or("foo", 0)?;
-        assert_eq!(value, 42);
-
-        let value: i64 = hash.fetch_str_or("bar", 0)?;
-        assert_eq!(value, 0);
-
-        Ok(())
-    }
-    
-    pub fn mrhash_try_fetch_str(_r: &Ruby) -> Result<(), magnus::Error> {
-        let hash = MRHash::new();
-        hash.aset("foo", 42)?;
-
-        let value: i64 = hash.try_fetch_str("foo")?;
-        assert_eq!(value, 42);
-
-        let value: Result<i64, magnus::Error> = hash.try_fetch_str("bar");
-        assert!(value.is_err());
-
-        Ok(())
-    }
-    
-    pub fn mrhash_fetch(_r: &Ruby) -> Result<(), magnus::Error> {
-        let hash = MRHash::new();
-        hash.aset(Symbol::new("foo"), 42)?;
-        hash.aset(eval::<Qnil>("nil")?, true)?;
-
-        let value: Option<i64> = hash.fetch(Symbol::new("foo"))?;
-        assert_eq!(value, Some(42));
-        
-        let value: Option<bool> = hash.fetch(eval::<Qnil>("nil")?)?;
-        assert_eq!(value, Some(true));
-
-        let value: Option<i64> = hash.fetch(Symbol::new("bar"))?;
-        assert_eq!(value, None);
-
-        Ok(())
-    }
-    
-    pub fn mrhash_fetch_or(_r: &Ruby) -> Result<(), magnus::Error> {
-        let hash = MRHash::new();
-        hash.aset(Symbol::new("foo"), 42)?;
-        hash.aset(eval::<Qnil>("nil")?, true)?;
-
-        let value: i64 = hash.fetch_or(Symbol::new("foo"), 0)?;
-        assert_eq!(value, 42);
-        
-        let value: bool = hash.fetch_or(eval::<Qnil>("nil")?, false)?;
-        assert_eq!(value, true);
-
-        let value: i64 = hash.fetch_or(Symbol::new("bar"), 0)?;
-        assert_eq!(value, 0);
-
-        Ok(())
-    }
-    
-    pub fn mrhash_try_fetch(_r: &Ruby) -> Result<(), magnus::Error> {
-        let hash = MRHash::new();
-        hash.aset(Symbol::new("foo"), 42)?;
-        hash.aset(eval::<Qnil>("nil")?, true)?;
-
-        let value: i64 = hash.try_fetch(Symbol::new("foo"))?;
-        assert_eq!(value, 42);
-        
-        let value: bool = hash.try_fetch(eval::<Qnil>("nil")?)?;
-        assert_eq!(value, true);
-
-        let value: Result<i64, magnus::Error> = hash.try_fetch(Symbol::new("bar"));
-        assert!(value.is_err());
-
-        Ok(())
-    }
-    
-    pub fn mrhash_set_sym(_r: &Ruby) -> Result<(), magnus::Error> {
-        let hash = MRHash::new();
-        hash.set_sym("foo", 42)?;
-        hash.set_sym("bar", "baz")?;
-
-        let value: Option<i64> = hash
-            .get(Symbol::new("foo"))
-            .map(TryConvert::try_convert)
-            .transpose()?;
-        assert_eq!(value, Some(42));
-
-        let value: Option<String> = hash
-            .get(Symbol::new("bar"))
-            .map(TryConvert::try_convert)
-            .transpose()?;
-        assert_eq!(value.as_deref(), Some("baz"));
-
-        Ok(())
-    }
-    
-    pub fn mrhash_set_str(_r: &Ruby) -> Result<(), magnus::Error> {
-        let hash = MRHash::new();
-        hash.set_str("foo", 42)?;
-        hash.set_str("bar", "baz")?;
-
-        let value: Option<i64> = hash
-            .get("foo")
-            .map(TryConvert::try_convert)
-            .transpose()?;
-        assert_eq!(value, Some(42));
-
-        let value: Option<String> = hash
-            .get("bar")
-            .map(TryConvert::try_convert)
-            .transpose()?;
-        assert_eq!(value.as_deref(), Some("baz"));
-
-        Ok(())
-    }
-    
-    pub fn mrhash_set(_r: &Ruby) -> Result<(), magnus::Error> {
-        let hash = MRHash::new();
-        hash.set(Symbol::new("foo"), 42)?;
-        hash.set(eval::<Qnil>("nil")?, true)?;
-
-        let value: Option<i64> = hash
-            .get(Symbol::new("foo"))
-            .map(TryConvert::try_convert)
-            .transpose()?;
-        assert_eq!(value, Some(42));
-        
-        let value: Option<bool> = hash
-            .get(eval::<Qnil>("nil")?)
-            .map(TryConvert::try_convert)
-            .transpose()?;
-        assert_eq!(value, Some(true));
-
-        Ok(())
-    }
-    
     pub fn mavrik_module_is_defined(_r: &Ruby) -> Result<(), magnus::Error> {
         let module = module_mavrik();
         assert!(!module.is_nil());

@@ -32,9 +32,9 @@ impl<Store> MavrikTcpListener<Store> {
     /// A result containing a new Mavrik TCP listener on OK, otherwise any error that occurred.
     ///
     pub async fn new(options: &MavrikOptions, store: Store) -> Result<Self, anyhow::Error> {
-        let host = options.get("host", "127.0.0.1".to_string())?;
-        let port = options.get("port", 3001)?;
-        let signal_parent_ready = options.get("signal_parent_ready", false)?;
+        let host = options.host.as_deref().unwrap_or("127.0.0.1").to_string();
+        let port = options.port.unwrap_or(3001);
+        let signal_parent_ready = options.signal_parent_ready.unwrap_or(false);
 
         let inner = TcpListener::bind(format!("{host}:{port}")).await?;
         let handlers = JoinSet::new();

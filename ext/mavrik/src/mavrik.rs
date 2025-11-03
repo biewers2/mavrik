@@ -3,19 +3,17 @@ use crate::service::Services;
 use crate::signal_listener::SignalListener;
 use crate::store::TasksInMemory;
 use crate::tcp::MavrikTcpListener;
-use anyhow::anyhow;
 use log::info;
-use magnus::{RHash, Symbol, TryConvert};
-use std::sync::Arc;
+use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 use tokio::try_join;
 
-pub struct Mavrik {
-    options: MavrikOptions,
+pub struct Mavrik<'a> {
+    options: &'a MavrikOptions,
 }
 
-impl Mavrik {
-    pub fn new(options: MavrikOptions) -> Self {
+impl<'a> Mavrik<'a> {
+    pub fn new(options: &'a MavrikOptions) -> Self {
         Self { options }
     }
 
@@ -51,46 +49,10 @@ impl Mavrik {
     }
 }
 
-pub struct MavrikOptions(Arc<RHash>);
-
-impl From<RHash> for MavrikOptions {
-    fn from(value: RHash) -> Self {
-        Self(Arc::new(value))
-    }
-}
-
-impl MavrikOptions {
-    pub fn get<T>(&self, key: &str, default: T) -> Result<T, anyhow::Error>
-    where
-        T: TryConvert,
-    {
-        self.rb_get(key, default).map_err(|e| anyhow!("{e}"))
-    }
-
-    fn rb_get<T>(&self, key: &str, default: T) -> Result<T, magnus::Error>
-    where
-        T: TryConvert,
-    {
-        if let Some(value) = self
-            .0
-            .fetch::<_, magnus::Value>(key)
-            .map(|value| TryConvert::try_convert(value))
-            .ok()
-            .transpose()?
-        {
-            return Ok(value);
-        }
-
-        if let Some(value) = self
-            .0
-            .fetch::<_, magnus::Value>(Symbol::new(key))
-            .map(|value| TryConvert::try_convert(value))
-            .ok()
-            .transpose()?
-        {
-            return Ok(value);
-        }
-
-        Ok(default)
-    }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MavrikOptions {
+    pub host: Option<String>,
+    pub port: Option<u16>,
+    pub rb_thread_count: Option<usize>,
+    pub signal_parent_ready: Option<bool>,
 }

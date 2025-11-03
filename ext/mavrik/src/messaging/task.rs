@@ -1,9 +1,7 @@
-use anyhow::anyhow;
-use magnus::RHash;
-use crate::rb::util::{class_mavrik_error, mavrik_error, MRHash};
+use crate::rb::util::class_mavrik_error;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct NewTask {
     pub queue: String,
     pub definition: String,
@@ -49,33 +47,6 @@ impl From<anyhow::Error> for TaskResult {
             class: class_mavrik_error().to_string(),
             message: format!("{value}"),
             backtrace: vec![]
-        }
-    }
-}
-
-impl TryFrom<RHash> for TaskResult {
-    type Error = magnus::Error;
-
-    fn try_from(h: RHash) -> Result<Self, Self::Error> {
-        let h = MRHash(h);
-        
-        let variant = h.try_fetch_sym::<String>("type")?;
-        match variant.as_str() {
-            "success" => {
-                Ok(Self::Success {
-                    result: h.try_fetch_sym("result")?,
-                })
-            },
-            
-            "failure" => {
-                Ok(Self::Failure {
-                    class: h.try_fetch_sym("class")?,
-                    message: h.try_fetch_sym("message")?,
-                    backtrace: h.try_fetch_sym("backtrace")?,
-                })
-            }
-            
-            _ => Err(mavrik_error(anyhow!("unsupported request type: {}", variant))),
         }
     }
 }

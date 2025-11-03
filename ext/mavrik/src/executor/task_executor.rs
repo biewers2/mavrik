@@ -58,7 +58,7 @@ impl<Store> TaskExecutor<Store> {
     /// `params` - Values for constructing the task executor.
     ///
     pub fn new(options: &MavrikOptions, store: Store) -> Result<Self, anyhow::Error> {
-        let rb_thread_count = options.get("rb_thread_count", 4usize)?;
+        let rb_thread_count = options.rb_thread_count.unwrap_or(4);
 
         let mut thread_table = HashMap::new();
         let (messages_tx, messages_rx) = mpsc::channel(rb_thread_count);

@@ -43,18 +43,6 @@ mod tests {
             main::tests::main_defines_ruby_class_and_methods(&ruby)?;
 
             // crate::rb::util
-            util::tests::mrhash_fetch_sym(&ruby)?;
-            util::tests::mrhash_fetch_sym_or(&ruby)?;
-            util::tests::mrhash_try_fetch_sym(&ruby)?;
-            util::tests::mrhash_fetch_str(&ruby)?;
-            util::tests::mrhash_fetch_str_or(&ruby)?;
-            util::tests::mrhash_try_fetch_str(&ruby)?;
-            util::tests::mrhash_fetch(&ruby)?;
-            util::tests::mrhash_fetch_or(&ruby)?;
-            util::tests::mrhash_try_fetch(&ruby)?;
-            util::tests::mrhash_set_sym(&ruby)?;
-            util::tests::mrhash_set_str(&ruby)?;
-            util::tests::mrhash_set(&ruby)?;
             util::tests::mavrik_module_is_defined(&ruby)?;
             util::tests::mavrik_error_class_is_defined(&ruby)?;
             util::tests::mavrik_error_uses_custom_message(&ruby)?;

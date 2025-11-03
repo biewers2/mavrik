@@ -1,22 +1,25 @@
 use crate::mavrik::{Mavrik, MavrikOptions};
 use crate::rb::util::{mavrik_error, module_mavrik};
 use crate::runtime::async_runtime;
-use crate::without_gvl;
+use crate::{ruby_or_mavrik_error, without_gvl};
 use log::info;
-use magnus::{function, Object, RHash, Ruby};
+use magnus::{function, Object, Ruby};
+use serde_magnus::deserialize;
 
 pub(crate) fn define_main(_ruby: &Ruby) -> Result<(), magnus::Error> {
     module_mavrik().define_singleton_method("main", function!(main, 1))?;
     Ok(())
 }
 
-fn main(options: RHash) -> Result<(), magnus::Error> {
+fn main(options: magnus::Value) -> Result<(), magnus::Error> {
+    let ruby = ruby_or_mavrik_error!()?;
+    let options: MavrikOptions = deserialize(&ruby, options)?;
     info!(options:?; "Starting Mavrik server");
 
+    let options_ref = &options;
     let result = without_gvl!({ 
         async_runtime().block_on(async move {
-            let options = MavrikOptions::from(options);
-            Mavrik::new(options).run().await
+            Mavrik::new(options_ref).run().await
         })
     });
     
