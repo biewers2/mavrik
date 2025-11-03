@@ -11,13 +11,6 @@ pub mod service;
 pub mod executor;
 pub mod store;
 
-#[magnus::init]
-fn init(ruby: &magnus::Ruby) -> Result<(), magnus::Error> {
-    env_logger::init();
-    rb::define::define_rb(ruby)?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use magnus::Ruby;

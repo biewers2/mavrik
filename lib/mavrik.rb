@@ -7,7 +7,7 @@ require_relative "mavrik/execute_task"
 require_relative "mavrik/executor"
 require_relative "mavrik/task"
 require_relative "mavrik/version"
-require_relative "mavrik/mavrik"
+require_relative "mavrik/mavrik_ext"
 
 module Mavrik
   extend Executor

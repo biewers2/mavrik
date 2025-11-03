@@ -403,7 +403,6 @@ name = "mavrik"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "env_logger",
  "futures",
  "libc",
  "log",
@@ -414,6 +413,27 @@ dependencies = [
  "serde_magnus",
  "signal-hook-tokio",
  "tokio",
+]
+
+[[package]]
+name = "mavrik-exe"
+version = "0.1.0"
+dependencies = [
+ "env_logger",
+ "log",
+ "magnus",
+ "mavrik",
+ "rutie",
+ "serde_magnus",
+]
+
+[[package]]
+name = "mavrik-ext"
+version = "0.1.0"
+dependencies = [
+ "env_logger",
+ "magnus",
+ "mavrik",
 ]
 
 [[package]]

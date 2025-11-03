@@ -53,7 +53,7 @@ RSpec.describe Mavrik::ExecuteTask do
 
       expect(result).to include(
         type: :failure,
-        class: StandardError,
+        class: StandardError.to_s,
         message: "error message"
       )
     end

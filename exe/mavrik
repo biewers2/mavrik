@@ -1,5 +1,0 @@
-#!/usr/bin/env ruby
-
-require "mavrik"
-
-Mavrik.main(Mavrik.config.to_h)

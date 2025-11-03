@@ -26,5 +26,5 @@ Gem::Specification.new do |spec|
   spec.bindir = "exe"
   spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
   spec.require_paths = ["lib"]
-  spec.extensions = ["ext/mavrik/Cargo.toml"]
+  spec.extensions = ["ext/mavrik-ext/Cargo.toml"]
 end

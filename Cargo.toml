@@ -4,7 +4,7 @@
 
 [workspace]
 resolver = "2"
-members = ["ext/mavrik"]
+members = ["ext/mavrik-exe", "ext/mavrik-ext", "ext/mavrik-lib"]
 
 [profile.dev]
 opt-level = 0
