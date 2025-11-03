@@ -13,11 +13,13 @@ pub struct TcpClientHandler<Store> {
 
 impl<Store> TcpClientHandler<Store>
 where
-    Store: PushStore<Id = TaskId, Error = anyhow::Error> 
+    Store: PushStore<Id = TaskId, Error = anyhow::Error>
         + PullStore<Id = TaskId, Error = anyhow::Error>
         + QueryStore<Error = anyhow::Error>
-        + Clone + Send + Sync + 'static,
-    
+        + Clone
+        + Send
+        + Sync
+        + 'static,
 {
     pub fn new(stream: TcpStream, store: Store) -> Self {
         Self { stream, store }
@@ -29,38 +31,40 @@ where
     Store: PushStore<Id = TaskId, Error = anyhow::Error>
         + PullStore<Id = TaskId, Error = anyhow::Error>
         + QueryStore<Error = anyhow::Error>
-        + Clone + Send + Sync + 'static,
+        + Clone
+        + Send
+        + Sync
+        + 'static,
 {
-    type TaskOutput = Result<MavrikRequest, anyhow::Error>;
+    type ReadyTask = Result<MavrikRequest, anyhow::Error>;
 
-    async fn poll_task(&mut self) -> Self::TaskOutput {
+    async fn poll_task(&mut self) -> Self::ReadyTask {
         read_object(&mut self.stream)
             .await
             .context("receiving Mavrik request over TCP failed")
     }
 
-    async fn on_task_ready(&mut self, request: Self::TaskOutput) -> Result<(), anyhow::Error> {
-        match request? {
-            MavrikRequest::NewTask(new_task) => {
-                let task = Task::from(new_task);
-                let task_id = self.store.push(task).await.context("store push failed")?;
-                let response = MavrikResponse::NewTaskId(task_id);
-
-                trace!(response:?; "Sending response over TCP");
-                write_object(&mut self.stream, &response)
+    async fn on_task_ready(&mut self, request: Self::ReadyTask) -> Result<(), anyhow::Error> {
+        let response = match request? {
+            MavrikRequest::NewTask { queue, payload } => {
+                let task = Task::from(payload);
+                let task_id = self
+                    .store
+                    .push(&queue, task)
                     .await
-                    .context("sending new task ID over TCP failed")?;
-            },
+                    .context("store push failed")?;
+                MavrikResponse::NewTaskId(task_id)
+            }
 
             MavrikRequest::GetStoreState => {
                 let state = self.store.state().await?;
-                let response = MavrikResponse::StoreState(state);
-                write_object(&mut self.stream, &response)
-                    .await
-                    .context("sending state over TCP failed")?;
+                MavrikResponse::StoreState(state)
             }
         };
-        Ok(())
+
+        trace!(response:?; "Sending response over TCP");
+        write_object(&mut self.stream, &response)
+            .await
+            .context("sending response over TCP failed")
     }
 }
-

@@ -1,12 +1,13 @@
 //!
 //! A trivial, inefficient implementation of storing tasks.
 //!
-//! Stores all task IDs, values, and results in memory. This means all data will be lost if the application crashes.
-//! This implementation is meant to be a starting point to decouple the task execution logic from the logic of managing
-//! task queues and results.
+//! Stores all task IDs, values, and results in memory. This means all data will be lost if the
+//! application crashes. This implementation is meant to be a starting point to decouple the task
+//! execution logic from the logic of managing task queues and results.
 //!
 
 use crate::messaging::{Task, TaskId};
+use crate::store::store_state::{StoreState, StoredTask, StoredTaskStatus};
 use crate::store::{ProcessStore, PullStore, PushStore, QueryStore};
 use log::trace;
 use serde::de::DeserializeOwned;
@@ -19,7 +20,6 @@ use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 use std::time::SystemTime;
 use tokio::sync::Mutex;
-use crate::store::store_state::{StoreState, StoredTask, StoredTaskStatus};
 
 #[derive(Debug, Clone)]
 pub struct TasksInMemory {
@@ -71,9 +71,10 @@ impl PushStore for TasksInMemory {
     type Id = TaskId;
     type Error = anyhow::Error;
 
-    async fn push<S>(&self, value: S) -> Result<Self::Id, Self::Error>
+    async fn push<S, V>(&self, queue: S, value: V) -> Result<Self::Id, Self::Error>
     where
-        S: Serialize
+        S: AsRef<str> + Send,
+        V: Serialize + Send,
     {
         let value = serde_json::to_string(&value)?;
         let id = Self::next_id();
@@ -95,7 +96,7 @@ impl PullStore for TasksInMemory {
 
     async fn pull<D>(&self, id: Self::Id) -> Result<D, Self::Error>
     where
-        D: DeserializeOwned
+        D: DeserializeOwned,
     {
         let output = PullTask::new(id, &self).await?;
         trace!(id, output:?; "Pulled from store");
@@ -109,9 +110,9 @@ impl ProcessStore for TasksInMemory {
     type Id = TaskId;
     type Error = anyhow::Error;
 
-    async fn next<D>(&self) -> Result<(Self::Id, D), Self::Error>
+    async fn dequeue<D>(&self) -> Result<(Self::Id, D), Self::Error>
     where
-        D: DeserializeOwned
+        D: DeserializeOwned,
     {
         let (id, value) = NextTask::new(&self).await?;
         trace!(id, value:?; "Pulling next task for processing");
@@ -120,9 +121,9 @@ impl ProcessStore for TasksInMemory {
         Ok((id, value))
     }
 
-    async fn publish<S>(&self, id: Self::Id, output: S) -> Result<(), Self::Error>
+    async fn publish_result<S>(&self, id: Self::Id, output: S) -> Result<(), Self::Error>
     where
-        S: Serialize + Send
+        S: Serialize + Send,
     {
         let output = serde_json::to_string(&output)?;
         trace!(id, output:?; "Publishing completed task");
@@ -133,7 +134,7 @@ impl ProcessStore for TasksInMemory {
         if let Some(waker) = wakers.remove(&id) {
             waker.wake();
         }
-        
+
         Ok(())
     }
 }
@@ -163,7 +164,7 @@ impl Future for PullTask {
             Poll::Pending => return Poll::Pending,
             Poll::Ready(mut completed) => {
                 if let Some((_, task)) = completed.remove_entry(&self.task_id) {
-                    return Poll::Ready(Ok(task))
+                    return Poll::Ready(Ok(task));
                 }
             }
         };
@@ -177,7 +178,7 @@ impl Future for PullTask {
                 } else {
                     wakers.insert(self.task_id, cx.waker().clone());
                 };
-            },
+            }
         };
 
         Poll::Pending
@@ -193,21 +194,21 @@ impl NextTask {
     pub fn new(tasks_in_memory: &TasksInMemory) -> Self {
         Self {
             queue_wakers: tasks_in_memory.queue_wakers.clone(),
-            queue: tasks_in_memory.queue.clone()
+            queue: tasks_in_memory.queue.clone(),
         }
     }
 }
 
 impl Future for NextTask {
     type Output = Result<(TaskId, String), anyhow::Error>;
-    
+
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         let queue = pin!(self.queue.lock());
         match queue.poll(cx) {
             Poll::Pending => return Poll::Pending,
             Poll::Ready(mut completed) => {
                 if let Some(task) = completed.pop() {
-                    return Poll::Ready(Ok(task))
+                    return Poll::Ready(Ok(task));
                 }
             }
         };
@@ -217,7 +218,7 @@ impl Future for NextTask {
             Poll::Pending => return Poll::Pending,
             Poll::Ready(mut wakers) => {
                 wakers.push(cx.waker().clone());
-            },
+            }
         };
 
         Poll::Pending
@@ -236,7 +237,7 @@ impl QueryStore for TasksInMemory {
                 status: StoredTaskStatus::Enqueued,
                 definition: task.definition,
                 args: task.args,
-                kwargs: task.kwargs
+                kwargs: task.kwargs,
             });
         }
 
@@ -247,7 +248,7 @@ impl QueryStore for TasksInMemory {
                 status: StoredTaskStatus::Processing,
                 definition: task.definition,
                 args: task.args,
-                kwargs: task.kwargs
+                kwargs: task.kwargs,
             });
         }
 
@@ -258,10 +259,10 @@ impl QueryStore for TasksInMemory {
                 status: StoredTaskStatus::Completed,
                 definition: task.definition,
                 args: task.args,
-                kwargs: task.kwargs
+                kwargs: task.kwargs,
             });
         }
-        
+
         Ok(StoreState { tasks })
     }
 }

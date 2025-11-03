@@ -18,13 +18,13 @@ impl SignalListener {
 }
 
 impl ServiceTask for SignalListener {
-    type TaskOutput = Option<c_int>;
+    type ReadyTask = Option<c_int>;
 
-    async fn poll_task(&mut self) -> Self::TaskOutput {
+    async fn poll_task(&mut self) -> Self::ReadyTask {
         self.signals.next().await
     }
 
-    async fn on_task_ready(&mut self, signal: Self::TaskOutput) -> Result<(), anyhow::Error> {
+    async fn on_task_ready(&mut self, signal: Self::ReadyTask) -> Result<(), anyhow::Error> {
         match signal {
             Some(SIGINT) => if let Some(term_tx) = self.term_tx.take() {
                 let _ = term_tx.send(());

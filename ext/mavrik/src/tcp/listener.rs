@@ -68,10 +68,10 @@ where
         + Sync
         + 'static,
 {
-    type TaskOutput = Result<(TcpStream, SocketAddr), anyhow::Error>;
+    type ReadyTask = Result<(TcpStream, SocketAddr), anyhow::Error>;
 
     // Accept TCP connections from client
-    async fn poll_task(&mut self) -> Self::TaskOutput {
+    async fn poll_task(&mut self) -> Self::ReadyTask {
         self.inner
             .accept()
             .await
@@ -79,7 +79,7 @@ where
     }
 
     // Handle TCP connections from client by spawning a new service task.
-    async fn on_task_ready(&mut self, conn: Self::TaskOutput) -> Result<(), anyhow::Error> {
+    async fn on_task_ready(&mut self, conn: Self::ReadyTask) -> Result<(), anyhow::Error> {
         let (stream, addr) = conn?;
         info!(addr:?; "Accepted connection");
 

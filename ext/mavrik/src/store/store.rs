@@ -1,7 +1,7 @@
-use std::future::Future;
+use crate::store::store_state::StoreState;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use crate::store::store_state::StoreState;
+use std::future::Future;
 
 /// A store that can have new entries pushed to it.
 pub trait PushStore {
@@ -14,9 +14,14 @@ pub trait PushStore {
     ///
     /// The ID of the entry that was pushed.
     ///
-    fn push<S>(&self, value: S) -> impl Future<Output = Result<Self::Id, Self::Error>> + Send
+    fn push<S, V>(
+        &self,
+        queue: S,
+        value: V,
+    ) -> impl Future<Output = Result<Self::Id, Self::Error>> + Send
     where
-        S: Serialize + Send;
+        S: AsRef<str> + Send,
+        V: Serialize + Send;
 }
 
 /// A store that can have entries pulled from it.
@@ -46,29 +51,33 @@ pub trait ProcessStore {
     ///
     /// A tuple containing the ID of the entry and the entry itself.
     ///
-    fn next<D>(&self) -> impl Future<Output = Result<(Self::Id, D), Self::Error>> + Send
+    fn dequeue<D>(&self) -> impl Future<Output = Result<(Self::Id, D), Self::Error>> + Send
     where
         D: DeserializeOwned;
-    
+
     /// Publish the result of processing an entry.
     ///
     /// # Arguments
     ///
     /// `id` - The ID of the entry that was processed.
     /// `output` - The result of processing the entry.
-    /// 
-    fn publish<S>(&self, id: Self::Id, output: S) -> impl Future<Output = Result<(), Self::Error>> + Send
+    ///
+    fn publish_result<S>(
+        &self,
+        id: Self::Id,
+        output: S,
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send
     where
         S: Serialize + Send;
 }
 
 /// A store that can be inspected and managed from an external actor.
-/// 
+///
 /// This is useful for inspecting the state of the store, removing entries that should no longer be processed,
 /// and so on.
 pub trait QueryStore {
     type Error;
-    
+
     /// Get the state of the store.
     ///
     /// # Returns

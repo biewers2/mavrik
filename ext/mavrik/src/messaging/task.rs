@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct NewTask {
-    pub queue: String,
     pub definition: String,
     pub args: String, // Serialized
     pub kwargs: String // Serialized
@@ -11,7 +10,6 @@ pub struct NewTask {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Task {
-    pub queue: String,
     pub definition: String,
     pub args: String, // Serialized
     pub kwargs: String // Serialized
@@ -33,7 +31,6 @@ pub enum TaskResult {
 impl From<NewTask> for Task {
     fn from(value: NewTask) -> Self {
         Self {
-            queue: value.queue,
             definition: value.definition,
             args: value.args,
             kwargs: value.kwargs,

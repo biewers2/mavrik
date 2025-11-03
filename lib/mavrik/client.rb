@@ -1,8 +1,10 @@
 # frozen_string_literal: true
 
+require "singleton"
+
 module Mavrik
   class Client
-#     include ::Singleton
+    include ::Singleton
 
     # Create a new Mavrik client connected to the server.
     def initialize
@@ -18,7 +20,7 @@ module Mavrik
       @conn.request({
         type: :new_task,
         queue: :default,
-        ctx: {
+        payload: {
           definition:,
           args: JSON.generate(args),
           kwargs: JSON.generate(kwargs)

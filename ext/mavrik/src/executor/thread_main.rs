@@ -77,9 +77,14 @@ async fn thread_loop(
                     kwargs,
                 },
             )?;
+            trace!(input:?; "Ruby task input");
+
             execute_task
                 .funcall_public::<_, (magnus::Value,), magnus::Value>("call", (input,))
-                .map(|h| deserialize(ruby, h))
+                .map(|output| {
+                    trace!(output:?; "Ruby task output");
+                    deserialize(ruby, output)
+                })
         });
 
         let task_result = result

@@ -14,14 +14,14 @@ where
 }
 
 pub trait ServiceTask {
-    type TaskOutput: Debug;
+    type ReadyTask: Debug;
 
-    async fn poll_task(&mut self) -> Self::TaskOutput {
+    async fn poll_task(&mut self) -> Self::ReadyTask {
         pending().await
     }
 
     #[allow(unused_variables)]
-    async fn on_task_ready(&mut self, output: Self::TaskOutput) -> Result<(), anyhow::Error> {
+    async fn on_task_ready(&mut self, output: Self::ReadyTask) -> Result<(), anyhow::Error> {
         Ok(())
     }
 

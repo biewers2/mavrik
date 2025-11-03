@@ -83,11 +83,11 @@ impl<Store> ServiceTask for TaskExecutor<Store>
 where
     Store: ProcessStore<Id = TaskId, Error = anyhow::Error>
 {
-    type TaskOutput = Result<TaskOutputKind, anyhow::Error>;
+    type ReadyTask = Result<TaskOutputKind, anyhow::Error>;
 
-    async fn poll_task(&mut self) -> Self::TaskOutput {
+    async fn poll_task(&mut self) -> Self::ReadyTask {
         select! { 
-            result = self.store.next(), if self.task_buf.len() < 100 => {
+            result = self.store.dequeue(), if self.task_buf.len() < 100 => {
                 Ok(TaskOutputKind::NextTask(result?))
             },
             
@@ -97,7 +97,7 @@ where
         }
     }
 
-    async fn on_task_ready(&mut self, output: Self::TaskOutput) -> Result<(), anyhow::Error> {
+    async fn on_task_ready(&mut self, output: Self::ReadyTask) -> Result<(), anyhow::Error> {
         match output? {
             TaskOutputKind::NextTask((task_id, task)) => {
                 match self.thread_ready_buf.pop() {
@@ -126,7 +126,7 @@ where
             },
             
             TaskOutputKind::TaskComplete((task_id, task_result)) => {
-                self.store.publish(task_id, task_result).await?;
+                self.store.publish_result(task_id, task_result).await?;
                 Ok(())
             }
         }

@@ -24,7 +24,7 @@ module Mavrik
     rescue => e
       {
         type: :failure,
-        class: e.class,
+        class: e.class.to_s,
         message: e.message,
         backtrace: e.backtrace
       }
