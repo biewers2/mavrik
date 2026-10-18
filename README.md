@@ -2,6 +2,35 @@
 
 Decentralized, asynchronous task executor for Ruby programs.
 
+## Architecture
+
+There are three components to Mavrik:
+- **Ruby gem**: serves as a thin wrapper to the extension
+- **Rust extension**: defines the Mavrik client
+- **Mavrik server**: the task manager and executor
+
+The Mavrik server is a standalone binary that can be run independently of the Ruby gem. It is responsible for managing
+and executing tasks submitted by clients. Although independent of the gem, the server is designed to run tasks in Ruby
+through the [magnus](https://docs.rs/magnus/latest/magnus/) crate.
+
+### Directory Structure
+
+| Directory | Description |
+|-----------|-------------|
+| `/` | Project root directory; Ruby gem definition and Rust workspace |
+| `/ext/mavrik-ext` | Rust extension crate; houses the client code |
+| `/ext/mavrik-exe` | Rust binary crate; houses the entrypoint for the server |
+| `/ext/mavrik-lib` | Rust library crate; houses the core logic used by the client/server |
+| `/ext/ruby-bridge` | Utility crate containing Ruby FFI bindings |
+
+## Development
+
+The Mavrik server can be developed independently of the Ruby gem by running `cargo` directly.
+
+
+TODO
+
+
 ## Installation
 
 Install the gem and add to the application's Gemfile by executing:
@@ -35,10 +64,3 @@ To install this gem onto your local machine, run `bundle exec rake install`. To 
 * `RUST_LOG=<level>`
   * View Rust logs when the env-logger is used
   * Level can be `warn`, `info`, `debug`, `trace`
-* `LD_LIBRARY_PATH=<path-to-shared-objects>`
-  * On Ubuntu 24 with Ruby installed using `asdf`, the compiler was having a hard time finding `libruby.so` on its own
-  * Specifying the `lib/` directory of where the shared object file is was necessary for cargo-related things to work
-
-## Contributing
-
-Bug reports and pull requests are welcome on GitHub at https://github.com/biewers2/mavrik.
