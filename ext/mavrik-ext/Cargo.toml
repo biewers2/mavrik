@@ -1,8 +1,7 @@
 [package]
 name = "mavrik-ext"
 version = "0.1.0"
-edition = "2024"
-authors = ["Jacob Biewer <biewers2@gmail.com>"]
+edition = { workspace = true }
 publish = false
 
 [lib]
@@ -10,5 +9,5 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 mavrik = { path = "../mavrik-lib" }
-env_logger = { version = "0.11", features = ["unstable-kv"] }
-magnus = "0.8"
+env_logger = { workspace = true }
+magnus = { workspace = true }

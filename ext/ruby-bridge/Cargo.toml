@@ -1,0 +1,8 @@
+[package]
+name = "ruby-bridge"
+version = "0.1.0"
+edition = { workspace = true }
+
+[dependencies]
+libc = { workspace = true }
+rb-sys = { workspace = true }

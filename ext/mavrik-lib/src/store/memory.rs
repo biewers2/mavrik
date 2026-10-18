@@ -2,7 +2,7 @@
 //! A trivial, inefficient implementation of storing tasks.
 //!
 //! Stores all task IDs, values, and results in memory. This means all data will be lost if the
-//! application crashes. This implementation is meant to be a starting point to decouple the task
+//! application closes. This implementation serves as a starting point to decouple the task
 //! execution logic from the logic of managing task queues and results.
 //!
 
@@ -10,12 +10,13 @@ use crate::messaging::{Task, TaskId};
 use crate::store::store_state::{StoreState, StoredTask, StoredTaskStatus};
 use crate::store::{ProcessStore, PullStore, PushStore, QueryStore};
 use log::trace;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::collections::HashMap;
+use std::collections::hash_map::Iter;
 use std::future::Future;
-use std::ops::DerefMut;
-use std::pin::{pin, Pin};
+use std::ops::{Deref, DerefMut};
+use std::pin::{Pin, pin};
 use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 use std::time::SystemTime;
@@ -71,7 +72,7 @@ impl PushStore for TasksInMemory {
     type Id = TaskId;
     type Error = anyhow::Error;
 
-    async fn push<S, V>(&self, queue: S, value: V) -> Result<Self::Id, Self::Error>
+    async fn push<S, V>(&self, _queue: S, value: V) -> Result<Self::Id, Self::Error>
     where
         S: AsRef<str> + Send,
         V: Serialize + Send,
@@ -159,6 +160,7 @@ impl Future for PullTask {
     type Output = Result<String, anyhow::Error>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        // Attempt to get and return the completed task from the store.
         let completed = pin!(self.completed.lock());
         match completed.poll(cx) {
             Poll::Pending => return Poll::Pending,
@@ -169,6 +171,8 @@ impl Future for PullTask {
             }
         };
 
+        // If no completed task was found, register the waker for this task ID so that it can be
+        // woken up when the task is completed.
         let wakers = pin!(self.completed_wakers.lock());
         match wakers.poll(cx) {
             Poll::Pending => return Poll::Pending,
@@ -203,6 +207,7 @@ impl Future for NextTask {
     type Output = Result<(TaskId, String), anyhow::Error>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        // Attempt to get and return the next task from the store.
         let queue = pin!(self.queue.lock());
         match queue.poll(cx) {
             Poll::Pending => return Poll::Pending,
@@ -213,6 +218,8 @@ impl Future for NextTask {
             }
         };
 
+        // If no task was found, register the waker so that it can be woken up when a new task is
+        // pushed.
         let wakers = pin!(self.queue_wakers.lock());
         match wakers.poll(cx) {
             Poll::Pending => return Poll::Pending,
@@ -230,39 +237,44 @@ impl QueryStore for TasksInMemory {
 
     async fn state(&self) -> Result<StoreState, Self::Error> {
         let mut tasks = vec![];
-        for (task_id, task_str) in self.queue.lock().await.iter() {
-            let task: Task = serde_json::from_str(task_str)?;
-            tasks.push(StoredTask {
-                id: task_id.clone(),
-                status: StoredTaskStatus::Enqueued,
-                definition: task.definition,
-                args: task.args,
-                kwargs: task.kwargs,
-            });
-        }
 
-        for (task_id, task_str) in self.busy.lock().await.iter() {
-            let task: Task = serde_json::from_str(task_str)?;
-            tasks.push(StoredTask {
-                id: task_id.clone(),
-                status: StoredTaskStatus::Processing,
-                definition: task.definition,
-                args: task.args,
-                kwargs: task.kwargs,
-            });
-        }
+        let queued_tasks = self.queue.lock().await;
+        push_tasks_to_store(
+            &mut tasks,
+            queued_tasks.iter().map(|(id, s)| (id, s)),
+            StoredTaskStatus::Enqueued,
+        )
+        .await?;
 
-        for (task_id, task_str) in self.completed.lock().await.iter() {
-            let task: Task = serde_json::from_str(task_str)?;
-            tasks.push(StoredTask {
-                id: task_id.clone(),
-                status: StoredTaskStatus::Completed,
-                definition: task.definition,
-                args: task.args,
-                kwargs: task.kwargs,
-            });
-        }
+        let busy_tasks = self.busy.lock().await;
+        push_tasks_to_store(&mut tasks, busy_tasks.iter(), StoredTaskStatus::Processing).await?;
+
+        let completed_tasks = self.completed.lock().await;
+        push_tasks_to_store(
+            &mut tasks,
+            completed_tasks.iter(),
+            StoredTaskStatus::Completed,
+        )
+        .await?;
 
         Ok(StoreState { tasks })
     }
+}
+
+async fn push_tasks_to_store(
+    stored_tasks: &mut Vec<StoredTask>,
+    new_tasks: impl IntoIterator<Item = (&TaskId, &String)> + Send,
+    status: StoredTaskStatus,
+) -> Result<(), anyhow::Error> {
+    for (task_id, task_str) in new_tasks {
+        let task: Task = serde_json::from_str(&task_str)?;
+        stored_tasks.push(StoredTask {
+            id: task_id.clone(),
+            status,
+            definition: task.definition,
+            args: task.args,
+            kwargs: task.kwargs,
+        });
+    }
+    Ok(())
 }

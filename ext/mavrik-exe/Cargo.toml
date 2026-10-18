@@ -1,14 +1,13 @@
 [package]
 name = "mavrik-exe"
 version = "0.1.0"
-edition = "2024"
-authors = ["Jacob Biewer <biewers2@gmail.com>"]
+edition = { workspace = true }
 publish = false
 
 [dependencies]
 mavrik = { path = "../mavrik-lib" }
-env_logger = { version = "0.11", features = ["unstable-kv"] }
-log = { version = "0.4", features = ["kv", "kv_std"] }
-magnus = { version = "0.8", features = ["embed"] }
-rutie = "0.9" # Need to extract GVL (un)locking and put it here.
-serde_magnus = "0.10"
+env_logger = { workspace = true }
+log = { workspace = true }
+magnus = { workspace = true, features = ["embed"] }
+rutie = { workspace = true }
+serde_magnus = { workspace = true }

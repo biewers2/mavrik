@@ -1,6 +1,6 @@
 # Mavrik
 
-Decentralized, asynchronous task executor.
+Decentralized, asynchronous task executor for Ruby programs.
 
 ## Installation
 
@@ -19,6 +19,10 @@ Run the Mavrik task executor by executing:
     $ bundle exec mavrik
 
 ## Development
+
+```bash
+bundle exec rake install
+```
 
 After checking out the repo, run `bin/setup` to install dependencies. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
 

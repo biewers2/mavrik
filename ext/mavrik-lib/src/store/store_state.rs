@@ -12,15 +12,15 @@ pub struct StoredTask {
     pub status: StoredTaskStatus,
     pub definition: String,
     pub args: String,
-    pub kwargs: String
+    pub kwargs: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum StoredTaskStatus {
     Enqueued,
     Processing,
     Completed,
     Retrying,
-    Failed
+    Failed,
 }

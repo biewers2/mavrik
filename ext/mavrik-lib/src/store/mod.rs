@@ -1,7 +1,7 @@
 mod store;
-mod in_memory;
+mod memory;
 mod store_state;
 
 pub use store::*;
-pub use in_memory::*;
+pub use memory::*;
 pub use store_state::*;
