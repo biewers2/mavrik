@@ -15,7 +15,11 @@ impl TaskId {
         Self(buf)
     }
 
-    pub fn from_split_parts(first_timestamp_part: u64, second_timestamp_part: u64, count: u32) -> Self {
+    pub fn from_split_parts(
+        first_timestamp_part: u64,
+        second_timestamp_part: u64,
+        count: u32,
+    ) -> Self {
         let mut buf = [0u8; 20];
         (&mut buf[..8]).clone_from_slice(&first_timestamp_part.to_be_bytes());
         (&mut buf[8..16]).clone_from_slice(&second_timestamp_part.to_be_bytes());
@@ -49,8 +53,12 @@ impl TryFrom<String> for TaskId {
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         let mut comps = value.split("-");
-        let time_0_str = comps.next().ok_or(anyhow!("first part of timestamp not found"))?;
-        let time_1_str = comps.next().ok_or(anyhow!("second part of timestamp not found"))?;
+        let time_0_str = comps
+            .next()
+            .ok_or(anyhow!("first part of timestamp not found"))?;
+        let time_1_str = comps
+            .next()
+            .ok_or(anyhow!("second part of timestamp not found"))?;
         let count_str = comps.next().ok_or(anyhow!("count part not found"))?;
 
         let time_0 = time_0_str.parse::<u64>()?;
@@ -88,7 +96,7 @@ impl From<&TaskId> for TaskId {
 impl Serialize for TaskId {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: Serializer
+        S: Serializer,
     {
         let task_id_str = format!("{}", self);
         serializer.serialize_str(&task_id_str)
@@ -98,7 +106,7 @@ impl Serialize for TaskId {
 impl<'de> Deserialize<'de> for TaskId {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'de>
+        D: Deserializer<'de>,
     {
         let task_id_str = String::deserialize(deserializer)?;
         let task_id = TaskId::try_from(task_id_str).map_err(|e| Error::custom(format!("{e}")))?;
@@ -108,8 +116,8 @@ impl<'de> Deserialize<'de> for TaskId {
 
 #[cfg(test)]
 mod tests {
+    use crate::message::task_id::TaskId;
     use anyhow::anyhow;
-    use crate::messaging::task_id::TaskId;
 
     #[test]
     fn task_id_displays() {

@@ -1,6 +1,6 @@
 use crate::io::{read_object, write_object};
-use crate::messaging::{MavrikRequest, MavrikResponse, Task, TaskId};
-use crate::service::ServiceTask;
+use crate::message::{MavrikRequest, MavrikResponse, Task, TaskId};
+use crate::service::Service;
 use crate::store::{PullStore, PushStore, QueryStore};
 use anyhow::Context;
 use log::trace;
@@ -26,7 +26,7 @@ where
     }
 }
 
-impl<Store> ServiceTask for TcpClientHandler<Store>
+impl<Store> Service for TcpClientHandler<Store>
 where
     Store: PushStore<Id = TaskId, Error = anyhow::Error>
         + PullStore<Id = TaskId, Error = anyhow::Error>
@@ -36,15 +36,15 @@ where
         + Sync
         + 'static,
 {
-    type ReadyTask = Result<MavrikRequest, anyhow::Error>;
+    type Payload = Result<MavrikRequest, anyhow::Error>;
 
-    async fn poll_task(&mut self) -> Self::ReadyTask {
+    async fn poll(&mut self) -> Self::Payload {
         read_object(&mut self.stream)
             .await
             .context("receiving Mavrik request over TCP failed")
     }
 
-    async fn on_task_ready(&mut self, request: Self::ReadyTask) -> Result<(), anyhow::Error> {
+    async fn on_ready(&mut self, request: Self::Payload) -> Result<(), anyhow::Error> {
         let response = match request? {
             MavrikRequest::NewTask { queue, payload } => {
                 let task = Task::from(payload);

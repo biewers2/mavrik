@@ -1,5 +1,5 @@
-use crate::messaging::task_id::TaskId;
-use crate::messaging::NewTask;
+use crate::message::NewTask;
+use crate::message::task_id::TaskId;
 use crate::store::StoreState;
 use serde::{Deserialize, Serialize};
 

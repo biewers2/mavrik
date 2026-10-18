@@ -1,4 +1,4 @@
-use crate::messaging::{MavrikRequest, MavrikResponse};
+use crate::message::{MavrikRequest, MavrikResponse};
 use crate::ruby::util::{mavrik_error, module_mavrik};
 use crate::runtime::async_runtime;
 use crate::tcp::{MavrikTcpClient, TcpClientOptions};
@@ -72,7 +72,7 @@ impl RbConnection {
 #[cfg(test)]
 pub mod tests {
     use crate::io::{read_object, write_object};
-    use crate::messaging::{MavrikRequest, MavrikResponse};
+    use crate::message::{MavrikRequest, MavrikResponse};
     use crate::ruby::connection::{RbConnection, RbConnectionConfig, define_connection};
     use crate::ruby::util::{mavrik_error, module_mavrik};
     use crate::runtime::async_runtime;

@@ -8,6 +8,7 @@ use serde_magnus::deserialize;
 fn main() {
     env_logger::init();
 
+    // Run the server for the same lifetime as the Ruby VM to allow running Ruby-defined tasks.
     magnus::Ruby::init(|ruby| {
         ruby.require("./lib/mavrik")?;
 

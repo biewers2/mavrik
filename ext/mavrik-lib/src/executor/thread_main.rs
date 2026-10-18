@@ -1,5 +1,5 @@
 use crate::executor::{ThreadId, ThreadMessage};
-use crate::messaging::{Task, TaskId, TaskResult};
+use crate::message::{Task, TaskId, TaskResult};
 use crate::ruby::util::{mavrik_error, module_mavrik};
 use crate::runtime::async_runtime;
 use crate::{with_gvl, without_gvl};
@@ -11,6 +11,10 @@ use serde::{Deserialize, Serialize};
 use serde_magnus::{deserialize, serialize};
 use tokio::sync::mpsc;
 
+/// The main function for a Ruby thread created by the task executor.
+///
+/// Will loop over tasks polled from the MPSC task receiver, delegating task execution to the
+/// `ExecuteTask` Ruby class.
 pub fn rb_thread_main(
     ruby: &Ruby,
     thread_id: ThreadId,

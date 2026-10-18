@@ -1,10 +1,10 @@
 use crate::mavrik::MavrikOptions;
-use crate::messaging::TaskId;
-use crate::service::{ServiceTask, ServiceChannel, Services};
+use crate::message::TaskId;
+use crate::service::{Service, ServiceChannel, start_service};
 use crate::store::{PullStore, PushStore, QueryStore};
 use crate::tcp::TcpClientHandler;
 use anyhow::Context;
-use libc::{getppid, kill, SIGUSR1};
+use libc::{SIGUSR1, getppid, kill};
 use log::{info, warn};
 use std::net::SocketAddr;
 use tokio::net::{TcpListener, TcpStream};
@@ -58,7 +58,7 @@ impl<Store> MavrikTcpListener<Store> {
     }
 }
 
-impl<Store> ServiceTask for MavrikTcpListener<Store>
+impl<Store> Service for MavrikTcpListener<Store>
 where
     Store: PushStore<Id = TaskId, Error = anyhow::Error>
         + PullStore<Id = TaskId, Error = anyhow::Error>
@@ -68,10 +68,10 @@ where
         + Sync
         + 'static,
 {
-    type ReadyTask = Result<(TcpStream, SocketAddr), anyhow::Error>;
+    type Payload = Result<(TcpStream, SocketAddr), anyhow::Error>;
 
     // Accept TCP connections from client
-    async fn poll_task(&mut self) -> Self::ReadyTask {
+    async fn poll(&mut self) -> Self::Payload {
         self.inner
             .accept()
             .await
@@ -79,11 +79,11 @@ where
     }
 
     // Handle TCP connections from client by spawning a new service task.
-    async fn on_task_ready(&mut self, conn: Self::ReadyTask) -> Result<(), anyhow::Error> {
+    async fn on_ready(&mut self, conn: Self::Payload) -> Result<(), anyhow::Error> {
         let (stream, addr) = conn?;
         info!(addr:?; "Accepted connection");
 
-        let service = Services::start(
+        let service = start_service(
             "TCP-handler",
             TcpClientHandler::new(stream, self.store.clone()),
         );

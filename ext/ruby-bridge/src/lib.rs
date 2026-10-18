@@ -1,8 +1,13 @@
-mod value;
+//! Ruby FFI definitions for calling Ruby C functions from Rust.
+//!
+//! Contains a thin set of wrapper functions for calling a block of Rust code with or without the
+//! Ruby global VM lock (GVL) held. This allows for safe concurrent execution of Rust code while
+//! allowing another Ruby thread to run.
 
 use libc::c_void;
 use std::ptr;
 
+/// Call a block of code with the global VM lock (GVL) released, allowing other Ruby threads to run.
 #[macro_export]
 macro_rules! without_gvl {
     ( $blk:block ) => {
@@ -10,39 +15,39 @@ macro_rules! without_gvl {
     };
 }
 
+/// Call a block of code with the global VM lock (GVL) acquired, allowing Ruby code to run.
 #[macro_export]
 macro_rules! with_gvl {
     ( $blk:block ) => {
-        ruby_bridge::call_with_gvl(move || $blk )
+        ruby_bridge::call_with_gvl(move || $blk)
     };
 }
 
 type CallbackPtr = *const c_void;
 type CallbackMutPtr = *mut c_void;
 
-pub fn call_without_gvl<F, R, G>(func: F, unblock_func: Option<G>) -> R
+pub fn call_without_gvl<F, R, G>(block: F, unblock_func: Option<G>) -> R
 where
     F: FnMut() -> R,
     G: FnMut(),
 {
     unsafe {
-        let ptr = if let Some(ubf) = unblock_func {
-            rb_thread_call_without_gvl(
+        let ptr = match unblock_func {
+            Some(unblock) => rb_thread_call_without_gvl(
                 thread_call_callbox as CallbackPtr,
-                closure_to_ptr(func),
+                closure_to_ptr(block),
                 thread_call_callbox as CallbackPtr,
-                closure_to_ptr(ubf),
-            )
-        } else {
-            rb_thread_call_without_gvl(
+                closure_to_ptr(unblock),
+            ),
+            None => rb_thread_call_without_gvl(
                 thread_call_callbox as CallbackPtr,
-                closure_to_ptr(func),
+                closure_to_ptr(block),
                 ptr::null(),
                 ptr::null_mut() as CallbackMutPtr,
-            )
+            ),
         };
 
-        ptr_to_data(ptr)
+        cast_pointer(ptr)
     }
 }
 
@@ -51,12 +56,8 @@ where
     F: FnMut() -> R,
 {
     unsafe {
-        let ptr = rb_thread_call_with_gvl(
-            thread_call_callbox as CallbackPtr,
-            closure_to_ptr(func),
-        );
-
-        ptr_to_data(ptr)
+        let ptr = rb_thread_call_with_gvl(thread_call_callbox as CallbackPtr, closure_to_ptr(func));
+        cast_pointer(ptr)
     }
 }
 
@@ -208,18 +209,17 @@ pub fn closure_to_ptr<F, R>(mut func: F) -> *mut c_void
 where
     F: FnMut() -> R,
 {
+    // Define a wrapper to call the function, move it on the heap, and return a raw pointer to the result.
     let wrap_return = move || {
         let r = func();
         Box::into_raw(Box::new(r)) as *const c_void
     };
 
+    // Move the function to the heap and return a raw pointer to it.
     let fnbox = Box::new(wrap_return) as Box<dyn FnMut() -> *const c_void>;
-
-    Box::into_raw(Box::new(fnbox)) as *mut c_void
+    Box::into_raw(fnbox) as *mut c_void
 }
 
-pub unsafe fn ptr_to_data<R>(ptr: *mut c_void) -> R {
-    unsafe {
-        *Box::from_raw(ptr as *mut R)
-    }
+unsafe fn cast_pointer<R>(ptr: *mut c_void) -> R {
+    unsafe { *Box::from_raw(ptr as *mut R) }
 }

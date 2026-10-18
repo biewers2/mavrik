@@ -574,7 +574,6 @@ name = "ruby-bridge"
 version = "0.1.0"
 dependencies = [
  "libc",
- "rb-sys",
 ]
 
 [[package]]

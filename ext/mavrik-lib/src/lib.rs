@@ -3,7 +3,7 @@
 pub mod executor;
 pub mod io;
 pub mod mavrik;
-pub mod messaging;
+pub mod message;
 pub mod ruby;
 pub mod runtime;
 pub mod service;

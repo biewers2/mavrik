@@ -1,5 +1,5 @@
 use crate::executor::TaskExecutor;
-use crate::service::Services;
+use crate::service::start_service;
 use crate::signal_listener::SignalListener;
 use crate::store::TasksInMemory;
 use crate::tcp::MavrikTcpListener;
@@ -21,15 +21,15 @@ impl<'a> Mavrik<'a> {
         let (term_tx, term_rx) = oneshot::channel();
         let task_memory = TasksInMemory::new();
 
-        let mut exe = Services::start(
+        let mut exe = start_service(
             "EXE",
             TaskExecutor::new(&self.options, task_memory.clone())?,
         );
-        let mut tcp = Services::start(
+        let mut tcp = start_service(
             "TCP",
             MavrikTcpListener::new(&self.options, task_memory).await?,
         );
-        let mut sig = Services::start("SIG", SignalListener::new(term_tx)?);
+        let mut sig = start_service("SIG", SignalListener::new(term_tx)?);
 
         let exe_chan = &mut exe.channel;
         let tcp_chan = &mut tcp.channel;

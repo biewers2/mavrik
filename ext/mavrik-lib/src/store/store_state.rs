@@ -1,4 +1,4 @@
-use crate::messaging::TaskId;
+use crate::message::TaskId;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

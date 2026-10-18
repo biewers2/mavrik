@@ -45,6 +45,10 @@ where
     magnus::Error::new(class_mavrik_error(), message)
 }
 
+/// Runs a closure with a handle to Ruby's API.
+///
+/// Attempts to get the Ruby handle, calling the closure on success, attempting again with the GVL
+/// locked if it wasn't, and finally panicking if the thread is not a Ruby thread.
 pub fn in_ruby<T>(mut func: impl FnMut(Ruby) -> T) -> T {
     match Ruby::get() {
         Ok(r) => func(r),

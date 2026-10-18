@@ -1,8 +1,8 @@
 use crate::executor::thread_main::rb_thread_main;
 use crate::mavrik::MavrikOptions;
-use crate::messaging::{Task, TaskId, TaskResult};
+use crate::message::{Task, TaskId, TaskResult};
 use crate::ruby::util::in_ruby;
-use crate::service::ServiceTask;
+use crate::service::Service;
 use crate::store::ProcessStore;
 use log::{debug, error};
 use magnus::value::ReprValue;
@@ -45,7 +45,7 @@ pub struct TaskExecutor<Store> {
     thread_table: HashMap<ThreadId, ThreadTableEntry>,
     messages_rx: mpsc::Receiver<ThreadMessage>,
     task_buf: Vec<(TaskId, Task)>,
-    thread_ready_buf: Vec<ThreadId>,
+    thread_ready_queue: Vec<ThreadId>,
 }
 
 impl<Store> TaskExecutor<Store> {
@@ -62,13 +62,13 @@ impl<Store> TaskExecutor<Store> {
         let mut thread_table = HashMap::new();
         let (messages_tx, messages_rx) = mpsc::channel(rb_thread_count);
         let task_buf = Vec::new();
-        let thread_ready_buf = Vec::new();
+        let thread_ready_queue = Vec::new();
 
-        in_ruby(|r| {
+        in_ruby(|ruby| {
             for thread_id in 0..rb_thread_count {
                 let (task_tx, task_rx) = mpsc::channel(1);
                 let messages_tx = messages_tx.clone();
-                let thread = r.thread_create_from_fn(move |r| {
+                let thread = ruby.thread_create_from_fn(move |r| {
                     rb_thread_main(r, thread_id, messages_tx, task_rx)
                 });
 
@@ -81,18 +81,18 @@ impl<Store> TaskExecutor<Store> {
             thread_table,
             messages_rx,
             task_buf,
-            thread_ready_buf,
+            thread_ready_queue,
         })
     }
 }
 
-impl<Store> ServiceTask for TaskExecutor<Store>
+impl<Store> Service for TaskExecutor<Store>
 where
     Store: ProcessStore<Id = TaskId, Error = anyhow::Error>,
 {
-    type ReadyTask = Result<TaskOutputKind, anyhow::Error>;
+    type Payload = Result<TaskOutputKind, anyhow::Error>;
 
-    async fn poll_task(&mut self) -> Self::ReadyTask {
+    async fn poll(&mut self) -> Self::Payload {
         select! {
             result = self.store.dequeue(), if self.task_buf.len() < 100 => {
                 Ok(TaskOutputKind::NextTask(result?))
@@ -104,10 +104,10 @@ where
         }
     }
 
-    async fn on_task_ready(&mut self, output: Self::ReadyTask) -> Result<(), anyhow::Error> {
+    async fn on_ready(&mut self, output: Self::Payload) -> Result<(), anyhow::Error> {
         match output? {
             TaskOutputKind::NextTask((task_id, task)) => {
-                match self.thread_ready_buf.pop() {
+                match self.thread_ready_queue.pop() {
                     Some(thread_id) => {
                         let entry = self.thread_table.get(&thread_id).expect("thread not found");
                         entry.task_tx.send((task_id, task)).await?;
@@ -126,7 +126,7 @@ where
                         entry.task_tx.send((task_id, task)).await?;
                     }
                     None => {
-                        self.thread_ready_buf.push(thread_id);
+                        self.thread_ready_queue.push(thread_id);
                     }
                 }
                 Ok(())

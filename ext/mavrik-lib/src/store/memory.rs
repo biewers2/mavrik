@@ -6,7 +6,7 @@
 //! execution logic from the logic of managing task queues and results.
 //!
 
-use crate::messaging::{Task, TaskId};
+use crate::message::{Task, TaskId};
 use crate::store::store_state::{StoreState, StoredTask, StoredTaskStatus};
 use crate::store::{ProcessStore, PullStore, PushStore, QueryStore};
 use log::trace;

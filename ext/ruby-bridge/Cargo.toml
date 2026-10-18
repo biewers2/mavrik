@@ -5,4 +5,3 @@ edition = { workspace = true }
 
 [dependencies]
 libc = { workspace = true }
-rb-sys = { workspace = true }
