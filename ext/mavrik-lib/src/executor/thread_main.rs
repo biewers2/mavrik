@@ -1,6 +1,6 @@
 use crate::executor::{ThreadId, ThreadMessage};
 use crate::messaging::{Task, TaskId, TaskResult};
-use crate::rb::util::{mavrik_error, module_mavrik};
+use crate::ruby::util::{mavrik_error, module_mavrik};
 use crate::runtime::async_runtime;
 use crate::{with_gvl, without_gvl};
 use anyhow::anyhow;

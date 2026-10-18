@@ -1,11 +1,11 @@
 use crate::messaging::{MavrikRequest, MavrikResponse};
-use crate::rb::util::{mavrik_error, module_mavrik};
+use crate::ruby::util::{mavrik_error, module_mavrik};
 use crate::runtime::async_runtime;
 use crate::tcp::{MavrikTcpClient, TcpClientOptions};
 use crate::{ruby_or_mavrik_error, without_gvl};
 use anyhow::Context;
 use log::debug;
-use magnus::{function, method, Module, Object, Ruby};
+use magnus::{Module, Object, Ruby, function, method};
 use serde::{Deserialize, Serialize};
 use serde_magnus::{deserialize, serialize};
 
@@ -73,8 +73,8 @@ impl RbConnection {
 pub mod tests {
     use crate::io::{read_object, write_object};
     use crate::messaging::{MavrikRequest, MavrikResponse};
-    use crate::rb::connection::{define_connection, RbConnection, RbConnectionConfig};
-    use crate::rb::util::{mavrik_error, module_mavrik};
+    use crate::ruby::connection::{RbConnection, RbConnectionConfig, define_connection};
+    use crate::ruby::util::{mavrik_error, module_mavrik};
     use crate::runtime::async_runtime;
     use crate::store::StoreState;
     use magnus::value::ReprValue;
@@ -128,10 +128,12 @@ pub mod tests {
         let result = RbConnection::new(serialize(ruby, &config)?);
 
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Connection refused"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Connection refused")
+        );
         Ok(())
     }
 

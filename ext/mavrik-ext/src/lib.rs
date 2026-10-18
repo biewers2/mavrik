@@ -1,4 +1,4 @@
-use mavrik::rb::define::define_rb;
+use mavrik::ruby::define::define_rb;
 
 #[magnus::init]
 fn init(ruby: &magnus::Ruby) -> Result<(), magnus::Error> {

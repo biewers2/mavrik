@@ -12,24 +12,23 @@ macro_rules! without_gvl {
 #[macro_export]
 macro_rules! with_gvl {
     ( $blk:block ) => {
-        rutie::Thread::call_with_gvl(move || $blk )
+        rutie::Thread::call_with_gvl(move || $blk)
     };
 }
 
 #[macro_export]
 macro_rules! ruby_or_mavrik_error {
     () => {
-        magnus::Ruby::get().map_err(crate::rb::util::mavrik_error)
+        magnus::Ruby::get().map_err(crate::ruby::util::mavrik_error)
     };
 }
 
 pub fn module_mavrik() -> RModule {
-    in_ruby(|ruby|
-        ruby
-            .class_object()
+    in_ruby(|ruby| {
+        ruby.class_object()
             .const_get::<_, RModule>("Mavrik")
             .expect("Mavrik module not defined")
-    )
+    })
 }
 
 pub fn class_mavrik_error() -> ExceptionClass {
@@ -40,7 +39,7 @@ pub fn class_mavrik_error() -> ExceptionClass {
 
 pub fn mavrik_error<S>(error: S) -> magnus::Error
 where
-    S: Debug
+    S: Debug,
 {
     let message = format!("{error:?}");
     magnus::Error::new(class_mavrik_error(), message)
@@ -54,7 +53,7 @@ pub fn in_ruby<T>(mut func: impl FnMut(Ruby) -> T) -> T {
                 let r = Ruby::get().expect("failed to get Ruby");
                 func(r)
             })
-        },
+        }
         Err(RubyUnavailableError::NonRubyThread) => {
             panic!("failed to get Ruby: not in a Ruby thread");
         }
@@ -63,18 +62,18 @@ pub fn in_ruby<T>(mut func: impl FnMut(Ruby) -> T) -> T {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::rb::util::{class_mavrik_error, in_ruby, mavrik_error, module_mavrik};
+    use crate::ruby::util::{class_mavrik_error, in_ruby, mavrik_error, module_mavrik};
     use anyhow::anyhow;
+    use magnus::Ruby;
     use magnus::error::ErrorType;
     use magnus::value::ReprValue;
-    use magnus::Ruby;
 
     pub fn mavrik_module_is_defined(_r: &Ruby) -> Result<(), magnus::Error> {
         let module = module_mavrik();
         assert!(!module.is_nil());
         Ok(())
     }
-    
+
     pub fn mavrik_error_class_is_defined(_r: &Ruby) -> Result<(), magnus::Error> {
         let error = class_mavrik_error();
         assert!(!error.is_nil());
@@ -89,9 +88,9 @@ pub mod tests {
                 assert_eq!(e.to_string(), class_mavrik_error().to_string());
                 assert!(m.contains("this is an error"));
                 Ok(())
-            },
+            }
 
-            e => panic!("Expected ErrorType::Error, got {e:?}")
+            e => panic!("Expected ErrorType::Error, got {e:?}"),
         }
     }
 

@@ -1,6 +1,6 @@
+use crate::ruby::connection::define_connection;
+use crate::ruby::main::define_main;
 use magnus::Ruby;
-use crate::rb::connection::define_connection;
-use crate::rb::main::define_main;
 
 pub fn define_rb(ruby: &Ruby) -> Result<(), magnus::Error> {
     define_main(ruby)?;
