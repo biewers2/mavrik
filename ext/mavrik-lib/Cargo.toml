@@ -16,3 +16,6 @@ serde_json = { workspace = true }
 serde_magnus = { workspace = true }
 signal-hook-tokio = { workspace = true }
 tokio = { workspace = true }
+
+[dev-dependencies]
+magnus = { workspace = true, features = ["embed"] }
